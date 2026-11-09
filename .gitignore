@@ -1,0 +1,13 @@
+# Local build products are never publication inputs.
+/ntv4004
+/ntv4004.exe
+/intel/pdp10
+/intel/pdp10.exe
+*.obj
+*.o
+*.pdb
+*.log
+__pycache__/
+# Intel's images stay local; see intel/README.md.
+/intel/upstream/*.sav
+/intel/upstream/*.bz2
