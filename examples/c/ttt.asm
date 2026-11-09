@@ -399,10 +399,6 @@ L0021:
         JMS QINC
         FIM 0,0A0H
         JMS QSTAC
-        FIM 0,0E0H
-        JMS QLDA
-        FIM 0,0B0H
-        JMS QSTAC
         FIM 6,0CH
         FIM 0,070H
         JMS QSTAC
@@ -503,7 +499,8 @@ L0033:
         FIM 0,0F0H
         JMS QLDB
         JMS QSLT
-        JCN 4,L0034
+        JCN 0CH,$+4
+        JUN L0034
 ; VALUE = SCORE;
         FIM 0,0D0H
         JMS QLDA
@@ -611,10 +608,6 @@ L0041:
         FIM 6,0
         FIM 0,0A0H
         JMS QSTAC
-        FIM 0,011H
-        JMS QLDA
-        FIM 0,0B0H
-        JMS QSTAC
         FIM 6,0EH
         FIM 0,070H
         JMS QSTAC
@@ -636,55 +629,60 @@ L0044:
         JUN QRETF
         FIM 0,1
         JUN QRETF
-        ORG 03CAH
-; STORE B, OR ITS LOW BYTE, AT MAIN-MEMORY ADDRESS A; THEN A = B.
-QSTIC:  LDM 0
-        XCH 8
-        LDM 0
-        XCH 9
-        LD 5
-        DCL
-        LD 6
-        XCH 0
-        LD 7
-        XCH 1
-        SRC 0
-        LD 10
-        WRM
-        INC 1
-        SRC 0
-        LD 11
-        WRM
-        JUN QMOVB
-QSTI:   LD 5
-        DCL
-        LD 6
-        XCH 0
-        LD 7
-        XCH 1
-        SRC 0
-        LD 8
-        WRM
-        INC 1
-        SRC 0
-        LD 9
-        WRM
-        INC 1
-        SRC 0
-        LD 10
-        WRM
-        INC 1
-        SRC 0
-        LD 11
-        WRM
-QMOVB:  LD 8
+        ORG 03BCH
+; COMPARE A WITH B, RETURNING 1 OR 0 IN THE ACCUMULATOR. THE SIGNED
+; COMPARISONS FLIP THE SIGN BITS AND COMPARE UNSIGNED.
+QSLT:   JMS QFLIP
+QULT:   JMS QCMP
+        JCN 2,QCF
+QCT:    BBL 1
+QSGE:   JMS QFLIP
+QUGE:   JMS QCMP
+        JCN 2,QCT
+QCF:    BBL 0
+QSGT:   JMS QFLIP
+QUGT:   JMS QCMPR
+        JCN 2,QCF
+        BBL 1
+QSLE:   JMS QFLIP
+QULE:   JMS QCMPR
+        JCN 2,QCT
+        BBL 0
+QFLIP:  CLC
+        LDM 8
+        ADD 4
         XCH 4
-        LD 9
-        XCH 5
-        LD 10
-        XCH 6
+        CLC
+        LDM 8
+        ADD 8
+        XCH 8
+        BBL 0
+; THE CARRY IS 1 IF A >= B (QCMP) OR B >= A (QCMPR).
+QCMP:   CLC
+        LD 7
+        SUB 11
+        CMC
+        LD 6
+        SUB 10
+        CMC
+        LD 5
+        SUB 9
+        CMC
+        LD 4
+        SUB 8
+        BBL 0
+QCMPR:  CLC
         LD 11
-        XCH 7
+        SUB 7
+        CMC
+        LD 10
+        SUB 6
+        CMC
+        LD 9
+        SUB 5
+        CMC
+        LD 8
+        SUB 4
         BBL 0
         ORG 03FBH
 ; THE END OF THE PROGRAM: A JUMP TO ITSELF.
@@ -918,61 +916,6 @@ QLDIC:  LD 5
         XCH 5
         BBL 0
         ORG 0500H
-; COMPARE A WITH B, RETURNING 1 OR 0 IN THE ACCUMULATOR. THE SIGNED
-; COMPARISONS FLIP THE SIGN BITS AND COMPARE UNSIGNED.
-QSLT:   JMS QFLIP
-QULT:   JMS QCMP
-        JCN 2,QCF
-QCT:    BBL 1
-QSGE:   JMS QFLIP
-QUGE:   JMS QCMP
-        JCN 2,QCT
-QCF:    BBL 0
-QSGT:   JMS QFLIP
-QUGT:   JMS QCMPR
-        JCN 2,QCF
-        BBL 1
-QSLE:   JMS QFLIP
-QULE:   JMS QCMPR
-        JCN 2,QCT
-        BBL 0
-QFLIP:  CLC
-        LDM 8
-        ADD 4
-        XCH 4
-        CLC
-        LDM 8
-        ADD 8
-        XCH 8
-        BBL 0
-; THE CARRY IS 1 IF A >= B (QCMP) OR B >= A (QCMPR).
-QCMP:   CLC
-        LD 7
-        SUB 11
-        CMC
-        LD 6
-        SUB 10
-        CMC
-        LD 5
-        SUB 9
-        CMC
-        LD 4
-        SUB 8
-        BBL 0
-QCMPR:  CLC
-        LD 11
-        SUB 7
-        CMC
-        LD 10
-        SUB 6
-        CMC
-        LD 9
-        SUB 5
-        CMC
-        LD 8
-        SUB 4
-        BBL 0
-        ORG 053FH
 ; PRINT THE STRING AT R0R1 ON THIS PAGE.
 QS1:   FIM 14,0F0H
         SRC 14
@@ -995,7 +938,57 @@ S0001:
 S0002:
         DB 069H,074H,065H,072H,061H,074H,069H,06FH,06EH,020H,063H,06FH
         DB 075H,06EH,074H,03AH,020H,0
-        ORG 0577H
+        ORG 0538H
+; STORE B, OR ITS LOW BYTE, AT MAIN-MEMORY ADDRESS A; THEN A = B.
+QSTIC:  LDM 0
+        XCH 8
+        LDM 0
+        XCH 9
+        LD 5
+        DCL
+        LD 6
+        XCH 0
+        LD 7
+        XCH 1
+        SRC 0
+        LD 10
+        WRM
+        INC 1
+        SRC 0
+        LD 11
+        WRM
+        JUN QMOVB
+QSTI:   LD 5
+        DCL
+        LD 6
+        XCH 0
+        LD 7
+        XCH 1
+        SRC 0
+        LD 8
+        WRM
+        INC 1
+        SRC 0
+        LD 9
+        WRM
+        INC 1
+        SRC 0
+        LD 10
+        WRM
+        INC 1
+        SRC 0
+        LD 11
+        WRM
+QMOVB:  LD 8
+        XCH 4
+        LD 9
+        XCH 5
+        LD 10
+        XCH 6
+        LD 11
+        XCH 7
+        BBL 0
+        ORG 0569H
 ; A == B OR A != B, RETURNING 1 OR 0 IN THE ACCUMULATOR.
 QEQ:    CLC
         LD 4
@@ -1033,7 +1026,7 @@ QNE:    CLC
         JCN 0CH,QNT
         BBL 0
 QNT:    BBL 1
-        ORG 05A3H
+        ORG 0595H
 ; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
 QTST:   LD 4
         JCN 0CH,QTT
@@ -1055,7 +1048,7 @@ QNOTZ:  LD 4
         JCN 0CH,QZF
         BBL 1
 QZF:    BBL 0
-        ORG 05BFH
+        ORG 05B1H
 ; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
 QCLR:   LDM 0
         XCH 12
@@ -1074,7 +1067,7 @@ QCLC:   SRC 0
         INC 12
         ISZ 13,QCLB
         BBL 0
-        ORG 05D4H
+        ORG 05C6H
 ; A = -A, OR A = A + 1.
 QNEG:   LD 4
         CMA
@@ -1093,7 +1086,7 @@ QINC:   ISZ 7,QINCX
         ISZ 5,QINCX
         INC 4
 QINCX:  BBL 0
-        ORG 05E8H
+        ORG 05DAH
 ; STORE A, OR ITS LOW BYTE, IN THE STATUS REGISTER AT R0R1.
 QSTAC:  LDM 0
         XCH 4
@@ -1111,16 +1104,7 @@ QSTA:   LD 1
         LD 7
         WR3
         BBL 0
-        ORG 05F8H
-; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
-QPUTC:  FIM 14,0F0H
-        SRC 14
-        LD 6
-        WRR
-        LD 7
-        WRR
-        BBL 0
-        ORG 0600H
+        ORG 05EAH
 ; A = A + B.
 QADD:   CLC
         LD 7
@@ -1136,7 +1120,16 @@ QADD:   CLC
         ADD 8
         XCH 4
         BBL 0
-        ORG 060EH
+        ORG 05F8H
+; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
+QPUTC:  FIM 14,0F0H
+        SRC 14
+        LD 6
+        WRR
+        LD 7
+        WRR
+        BBL 0
+        ORG 0600H
 ; A = A << 1.
 QSHL1:  CLC
         LD 7
@@ -1152,7 +1145,7 @@ QSHL1:  CLC
         RAL
         XCH 4
         BBL 0
-        ORG 061CH
+        ORG 060EH
 ; B = THE CHAR AT MAIN-MEMORY CHARACTER R0R1 OF BANK ACC.
 QLDBC:  DCL
         SRC 0
@@ -1167,7 +1160,7 @@ QLDBC:  DCL
         LDM 0
         XCH 9
         BBL 0
-        ORG 0629H
+        ORG 061BH
 ; EXCHANGE A AND B.
 QXAB:   LD 4
         XCH 8
@@ -1182,7 +1175,7 @@ QXAB:   LD 4
         XCH 11
         XCH 7
         BBL 0
-        ORG 0636H
+        ORG 0628H
 ; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
 QLDA:   LD 1
         DCL
@@ -1196,7 +1189,7 @@ QLDA:   LD 1
         RD3
         XCH 7
         BBL 0
-        ORG 0642H
+        ORG 0634H
 ; B = THE STATUS REGISTER AT R0R1.
 QLDB:   LD 1
         DCL
@@ -1210,12 +1203,12 @@ QLDB:   LD 1
         RD3
         XCH 11
         BBL 0
-        ORG 064EH
+        ORG 0640H
 ; INCREMENT THE INT AT R0R1, LEAVING IT IN A.
 QINCV:  JMS QLDA
         JMS QINC
         JUN QSTA
-        ORG 0654H
+        ORG 0646H
 ; THE LOW BIT OF A, IN THE ACCUMULATOR.
 QODD:   LD 7
         RAR

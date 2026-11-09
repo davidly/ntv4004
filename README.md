@@ -152,7 +152,8 @@ MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
   library. A C call stores a return number with the callee and jumps; a
   return jumps through a table of the call sites. A call that can reach the
   caller again first saves the caller's variables that are read after it,
-  on a stack in RAM, and restores them afterwards.
+  on a stack in RAM, and restores them afterwards. An argument for a
+  parameter the function never uses is evaluated only for its side effects.
 * `JCN` reaches only its own page, so the compiler places the code itself,
   using `JCN` with the opposite condition around a `JUN` for distant
   targets, and keeps each library routine and its tables on one page.
@@ -168,7 +169,7 @@ ttt's `main` takes no arguments:
 | [hello](examples/c/hello.c) | 94 bytes | 1,775 | 0.02 s | |
 | [e](examples/c/e.c) | 818 bytes | 29,482,646 | 319 s | 2.9 times as long |
 | [sieve](examples/c/sieve.c) | 622 bytes | 55,126,050 | 596 s | 7.7 times |
-| [ttt](examples/c/ttt.c) | 1,626 bytes | 17,465,299 | 189 s | 14.7 times |
+| [ttt](examples/c/ttt.c) | 1,612 bytes | 17,233,057 | 186 s | 14.5 times |
 
 e comes closest because most of its time goes to division, which the library
 does much as the hand-written code does. ttt falls furthest behind: each

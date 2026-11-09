@@ -2166,6 +2166,7 @@ class Compiler:
     def analyze(self):
         for f in self.functions.values():
             f.calls = set()
+            f.referenced = {n.var for n in expressions(f.body) if n.kind == 'var'}
             for e in expressions(f.body):
                 if e.kind == 'call':
                     if e.name in BUILTINS:
@@ -2715,18 +2716,24 @@ class Compiler:
                 self.op('LDM', (16 - len(run)) & 15)
                 self.op('XCH', 13)
                 self.call('QSAVE')
+        # An argument for a parameter that f never refers to is evaluated only for its side effects.
         if self.direct_arguments(e, f, caller):
             for arg, param in zip(e.args, f.params):
-                if not (arg.kind == 'var' and arg.var is param):  # passed unchanged
+                if param not in f.referenced:
+                    self.gen(arg, False)
+                elif not (arg.kind == 'var' and arg.var is param):  # passed unchanged
                     self.gen(arg)
                     self.store_var(param)
         else:
             temps = []
-            for arg in e.args:
+            for arg, param in zip(e.args, f.params):
+                if param not in f.referenced:
+                    self.gen(arg, False)
+                    continue
                 self.gen(arg)
-                temps.append(self.push_temp())
-                self.load_slot(temps[-1], 'QSTA')
-            for t, param in zip(temps, f.params):
+                temps.append((self.push_temp(), param))
+                self.load_slot(temps[-1][0], 'QSTA')
+            for t, param in temps:
                 self.load_slot(t)
                 self.store_var(param)
             for _ in temps:
@@ -2755,7 +2762,7 @@ class Compiler:
         for arg, param in zip(e.args, f.params):
             if any(n.kind == 'var' and n.var in written for n in walk(arg)):
                 return False
-            if not (arg.kind == 'var' and arg.var is param):
+            if param in f.referenced and not (arg.kind == 'var' and arg.var is param):
                 written.add(param)
         return True
 

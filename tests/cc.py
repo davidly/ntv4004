@@ -354,6 +354,7 @@ unsigned twice(unsigned x) { return x * 2; }
 void show(int x) { printf("[%d]", x); }
 int g;
 int bump() { g++; return g; }
+int ignore(int unused, int used) { return used; }
 int main()
 {
     show(add(3, add(4, 5)));
@@ -362,10 +363,12 @@ int main()
     g = 10;
     show(bump() + bump() * 10);
     show(add(bump(), bump()));
+    show(ignore(bump(), 7));
+    show(g);
     putchar('\\n');
     return 0;
 }
-''', '[12][44]14464[131][27]\n'),
+''', '[12][44]14464[131][27][7][15]\n'),
     'recursion': ('''
 int fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }
 int fact(int n) { if (n <= 1) return 1; return n * fact(n - 1); }
