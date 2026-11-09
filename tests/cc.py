@@ -651,6 +651,63 @@ class Compiler(unittest.TestCase):
                 self.assertEqual(marked, route)
         self.assertGreater(len(mazes), 1)
 
+    def test_life(self):
+        from life_support import initial, step, terminal
+        source = (ROOT/'examples/c/life.c').read_text()
+        if not SIZE:
+            assembly, compiler = cc4.compile_source(source, 'life')
+            memory, symbols, _ = asm4.Assembler().assemble(assembly)
+            for suffix, content in (('asm',assembly), ('hex',asm4.hex_file(memory)),
+                                    ('map',asm4.map_file(symbols))):
+                self.assertEqual(content, (ROOT/f'examples/c/life.{suffix}').read_text())
+            self.assertLessEqual(compiler.rom_end,4096)
+            self.assertLessEqual(compiler.memory_top,2048)
+            self.assertLessEqual(compiler.slots_used,128)
+        for pattern in range(6):
+            with self.subTest(pattern=pattern):
+                generations = 120 if pattern == 0 else 8
+                program = source.replace('#define PATTERN 0',f'#define PATTERN {pattern}')
+                program = program.replace('#define GENERATIONS 120',f'#define GENERATIONS {generations}')
+                output = run_c(program, limit=200_000_000)
+                frames, clears, visible, screen = terminal(output)
+                self.assertEqual(clears,1)
+                self.assertTrue(visible)
+                self.assertEqual(''.join(screen[20]).rstrip(),'Done.')
+                self.assertEqual(len(frames),generations+1)
+                board = initial(pattern)
+                previous = None
+                for generation,population,state,shown,writes in frames:
+                    self.assertEqual(generation,0 if previous is None else last_generation+1)
+                    self.assertEqual(population,len(board))
+                    self.assertEqual(state,'RUNNING')
+                    self.assertEqual(shown,board)
+                    if previous is not None:
+                        self.assertEqual(writes,previous ^ board)
+                    previous = board
+                    last_generation = generation
+                    board = step(board)
+                if pattern == 3:
+                    self.assertEqual(frames[-1][3],initial(3))  # still life
+                if pattern == 2:
+                    self.assertEqual(frames[2][3],initial(2))  # period-two oscillator
+                if pattern == 1:
+                    self.assertEqual(frames[4][3],{(r+1,c+1) for r,c in initial(1)})
+        for keys, expected in (
+                (b'q',[(0,'RUNNING')]),
+                (b' nnr nq',[(0,'RUNNING'),(0,'PAUSED'),(1,'PAUSED'),(2,'PAUSED'),
+                              (0,'PAUSED'),(0,'RUNNING'),(1,'RUNNING'),(2,'PAUSED')]),
+                (b'NNRQ',[(0,'RUNNING'),(1,'PAUSED'),(2,'PAUSED'),(0,'PAUSED')])):
+            with self.subTest(keys=keys):
+                frames, clears, visible, screen = terminal(run_c(source,keys=keys))
+                self.assertEqual([(f[0],f[2]) for f in frames],expected)
+                self.assertEqual(clears,1)
+                self.assertTrue(visible)
+                for generation,population,state,shown,writes in frames:
+                    board = initial(0)
+                    for _ in range(generation): board = step(board)
+                    self.assertEqual(shown,board)
+                    self.assertEqual(population,len(board))
+
     def test_hardware(self):
         source = '''
 int main()

@@ -23,7 +23,7 @@ of this repository.
 | `asm4.py` | Assembler for Intel's MAC4 and MAC40 language, checked against them byte for byte. |
 | `cc4.py` | Compiler for a subset of C, producing MAC4 source and assembling it with asm4.py. |
 | `examples/` | hello, echo, fib, and the sieve, e and ttt benchmarks, with their HEX and symbol maps. |
-| `examples/c/` | hello, a pedestrian crossing, a 4040 clock run by interrupts, eight queens, the Towers of Hanoi, a maze generator/solver, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
+| `examples/c/` | hello, a pedestrian crossing, a 4040 clock run by interrupts, eight queens, the Towers of Hanoi, a maze generator/solver, animated Life, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
 | `basic/` | Native 4004 BASIC interpreter, its C source and generated ROM image, and BASIC examples. |
 | `intel/` | Runs Intel's MAC4, MAC40 and INTERP/4 from Tymshare tape 169278 on a PDP-10 runner; not bundled. |
 | `tests/` | CPU tests from the MCS-40 manual, and comparisons with MAC4 and INTERP/4. |
@@ -250,6 +250,7 @@ and `char` elsewhere:
 | [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s | |
 | [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s | |
 | [maze](examples/c/maze.c) | 1,944 bytes | 460,917 | 4.98 s | |
+| [life](examples/c/life.c) | 2,306 bytes | 138,044,699 | 1,492 s | |
 
 queens counts the 92 solutions to the eight queens problem by recursive
 backtracking, with packed `_Bool` arrays for the columns and diagonals, and
@@ -289,6 +290,57 @@ Tests check several seeds in both compiler profiles: all 25 cells must be
 reachable, the maze must contain exactly 24 internal passages, and the marked
 solution must match an independently reconstructed route. The default ROM
 also runs in Intel's INTERP/4 with matching ntv4004 output and cycle counts.
+
+### Animated Conway's Game of Life
+
+```sh
+./ntv4004 -s:80000000 examples/c/life.hex
+python3 cc4.py --stats examples/c/life.c    # rebuild after editing settings
+```
+
+[life.c](examples/c/life.c) runs a **32×16** Life board in a VT100-compatible
+terminal at least **66 columns by 22 rows**. Live cells appear as `[]`. The
+initial board combines a glider, a blinker, a block, and an R-pentomino. Cells
+outside the board stay dead; edges do not wrap. The B3/S23 rules are evaluated
+into a second packed `_Bool` grid before the current generation is changed.
+The two grids use **306 RAM nibbles (153 bytes)**; scalars and runtime state
+use **27 status registers**. No BASIC interpreter or host-side Life logic is
+involved.
+
+The program clears the screen once, hides the cursor, then updates only changed
+cells using `ESC[row;columnH`. Consecutive changed cells share one cursor move.
+It redraws the generation/population status in place, so the board neither
+scrolls nor flashes through a blank screen. Normal completion and `q` restore
+the cursor and leave the final board visible. Run directly in a terminal rather
+than redirecting output to see the animation.
+
+| Key | Action |
+| --- | --- |
+| Space | Pause or resume. |
+| `n` | Advance one generation and pause. |
+| `r` | Restore the initial pattern and generation zero, preserving pause state. |
+| `q` | Quit. |
+
+The default run ends after **120 generations**. Edit `GENERATIONS` to change the
+limit; edit `PATTERN` to select 0 (mixed), 1 (glider), 2 (blinker), 3 (block),
+4 (R-pentomino), or 5 (an oscillator against the top edge), then rebuild. Keyboard
+controls are available in the 4004 build; a host C build runs the finite demo
+automatically and produces the same terminal output when no keys are pressed.
+
+`-s:80000000` deliberately uses an accelerated **80 MHz emulated clock** to pace
+the animation at about nine generations per second. The complete default run
+was measured at **13.80 seconds** with this setting, versus about **0.60 seconds**
+unthrottled on the development machine. Lower `-s` for slower animation. At a
+real 740 kHz 4004 clock the same 138,044,699 instruction cycles would take about
+**24 minutes 52 seconds**, excluding I/O waits. The table above reports this
+hardware estimate, not the paced animation time.
+
+Tests replay the terminal controls into a virtual screen and compare every
+frame of the full default run against independent Life rules. Separate cases
+cover still lifes, period-two oscillators, glider translation, dead edges,
+changed-cell-only updates, pause/step/reset/quit, and cursor restoration. Both
+compiler profiles are checked, and a four-generation run is also compared with
+Intel's INTERP/4 without adding a long simulation to the test suite.
 
 ### Smaller ROMs
 
@@ -435,7 +487,8 @@ between the nibbles of a longer subtraction.
   operator, assignment, branch and loop, and checks their output against a
   Python model of 16-bit C. It also runs programs for functions, recursion,
   arrays, the library and the preprocessor, and the C examples, including maze
-  connectivity and solution checks across several seeds.
+  connectivity and solution checks across several seeds. Life tests check
+  displayed frames against an independent model, partial redraws, and controls.
 * `tests/basic.py` checks the native interpreter, generated ROM, storage limits,
   integer arithmetic, array bounds, input, printing, the 192-digit e program,
   and the full ten-pass sieve plus segment-boundary variants. Mastermind tests

@@ -230,6 +230,28 @@ class Interp(unittest.TestCase):
         self.assertTrue(output.startswith(b'MAZE\n# #########\n'))
         self.assertEqual(output.count(b'SOLUTION\n'), 1)
 
+    def test_life_example(self):
+        import cc4
+        from life_support import initial, step, terminal
+        # Four generations keep the historical simulator test quick; cc.py
+        # checks all 120 generations of the checked-in default image.
+        source = (ROOT/'examples/c/life.c').read_text().replace(
+            '#define GENERATIONS 120','#define GENERATIONS 4')
+        assembly, _ = cc4.compile_source(source, 'life')
+        memory, _, _ = asm4.Assembler().assemble(assembly)
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory,'life.hex')
+            image.write_text(asm4.hex_file(memory),encoding='ascii')
+            output = self.run_both(image)
+        frames, clears, visible, _ = terminal(output.decode('ascii'))
+        self.assertEqual(len(frames),5)
+        self.assertEqual(clears,1)
+        self.assertTrue(visible)
+        board = initial(0)
+        for generation,frame in enumerate(frames):
+            self.assertEqual(frame[:4],(generation,len(board),'RUNNING',board))
+            board = step(board)
+
     def test_status_port(self):
         # Poll port 14 before each character; INTERP's answers follow the program's reads.
         source = """        FIM 14,0E0H

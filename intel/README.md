@@ -149,7 +149,9 @@ command lines, stack, RAM, port writes and instruction cycles, and it runs the
 examples and a status-polling program in both simulators. The small BASIC
 examples (hello, count, Fibonacci, squares, input and Mastermind) also run to completion in
 INTERP/4, with their expected output and ntv4004 cycle counts checked. The C maze
-generator/solver is checked against ntv4004 as well. Both skip when the
+generator/solver is checked against ntv4004 as well, along with a four-generation
+Life animation whose VT100 output is replayed and checked against independent
+Life rules. Both skip when the
 images are missing.
 
 ## Runner notes
