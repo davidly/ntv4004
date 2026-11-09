@@ -23,13 +23,13 @@ import cc4  # noqa: E402
 NTV = ROOT / ('ntv4004.exe' if os.name == 'nt' else 'ntv4004')
 
 
-def run_c(source, limit=50_000_000, keys=None, options=()):
+def run_c(source, limit=50_000_000, keys=None, options=(), cpu='4004'):
     """Compile and run C source; return its output as text."""
-    text, _ = cc4.compile_source(source)
-    memory, _, _ = asm4.Assembler('4004').assemble(text)
+    text, _ = cc4.compile_source(source, cpu=cpu)
+    memory, _, _ = asm4.Assembler(cpu).assemble(text)
     with tempfile.TemporaryDirectory(prefix='ntv4004 cc ') as directory:
         Path(directory, 'p.hex').write_text(asm4.hex_file(memory), encoding='ascii')
-        command = [str(NTV), f'-n:{limit}', *options]
+        command = [str(NTV), f'-n:{limit}', *(['-4'] if cpu == '4040' else []), *options]
         if keys is not None:
             Path(directory, 'keys.txt').write_bytes(keys)
             command.append('-l:keys.txt')
@@ -625,6 +625,50 @@ int main()
         expected = '\n'.join(lines) + '\n'
         source = (ROOT / 'examples' / 'c' / 'traffic.c').read_text()
         self.assertEqual(run_c(source, keys=b'xy', options=('-o',)), expected)
+
+    def test_interrupts(self):
+        source = (ROOT / 'examples' / 'c' / 'clock.c').read_text()
+        lamps = ['ROM port 0: ...*', 'ROM port 0: ....']
+        expected = ''.join(f'{lamps[(n + 1) % 2]}\n0:{n:02d}\n' for n in range(1, 11)) + 'done\n'
+        self.assertEqual(run_c(source, options=('-I:9259', '-o'), cpu='4040'), expected)
+        # Interrupts every few thousand cycles, from a handler that uses the library and a function of
+        # its own, must not disturb a program.
+        handler = '''
+int churn, hits[8];
+char seen;
+int mix(int x) { return (x * 7 + 3) % 1000; }
+__interrupt void tick(void)
+{
+    churn = mix(churn) / 3 + churn;
+    hits[churn & 7] += 1;
+    seen = churn;
+}
+'''
+        for seed in range(8):
+            source, expected = random_program(seed)
+            source = handler + source.replace('int main()\n{\n', 'int main()\n{\n    __ei();\n', 1)
+            with self.subTest(seed=seed):
+                try:
+                    output = run_c(source, 300_000_000, options=('-I:4999',), cpu='4040')
+                except cc4.CompileError as error:
+                    self.assertIn('bytes of ROM', str(error))
+                    continue
+                self.assertEqual(output, expected)
+        errors = {
+            '__interrupt void h(void) {} int main() { return 0; }': ('4004', 'need the 4040'),
+            'int main() { __ei(); return 0; }': ('4004', 'needs the 4040'),
+            '__interrupt int h(void) { return 1; } int main() { return 0; }': ('4040', 'must be void'),
+            '__interrupt void h(void) {} int main() { h(); return 0; }': ('4040', 'cannot be called'),
+            'int f() { return 1; } __interrupt void h(void) { f(); } int main() { return f(); }':
+                ('4040', 'called by both'),
+            'int f(int n) { return n ? f(n - 1) : 0; } __interrupt void h(void) { f(2); } int main() { return 0; }':
+                ('4040', 'recursive'),
+            '__interrupt void h(void) {} __interrupt void g(void) {} int main() { return 0; }': ('4040', 'one __interrupt'),
+        }
+        for source, (cpu, message) in errors.items():
+            with self.subTest(source), self.assertRaises(cc4.CompileError) as caught:
+                cc4.compile_source(source, cpu=cpu)
+            self.assertIn(message, str(caught.exception))
 
     def test_errors(self):
         cases = {

@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <signal.h>
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <fstream>
@@ -33,6 +34,7 @@
 static const unsigned g_originalClockHz = 740000;
 static const unsigned g_consolePort = 15, g_statusPort = 14; // ROM I/O ports, selected by SRC
 static bool g_showPorts = false;                               // -o: print other port writes as lamps
+static uint64_t g_interruptPeriod = 0, g_nextInterrupt = 0;    // -I: a 4040 timer interrupt every so many cycles
 uint8_t rom[ 8192 ];
 static I4004 cpu;
 static CTrace tracer;
@@ -368,10 +370,12 @@ static void usage()
             "  -i          include each instruction in the log; requires -t\n"
             "  -m:file     override automatic adjacent .map files for instruction tracing\n"
             "  -o          show writes to other ROM ports and to RAM output ports as lamps: * on, . off\n"
+            "  -I:cycles   4040: request an interrupt every this many instruction cycles; HLT waits for it\n"
             "Numbers use decimal, 0x hex, or leading-zero octal.\n"
             "Console: ROM port 15 (SRC 0F0H) writes or reads a character as two nibbles, high first;\n"
             "ROM port 14 reads 1 when a key is ready. LF input becomes CR, CR output becomes LF.\n"
-            "Ctrl-C or Ctrl-Q exits. HLT or a JUN to its own address ends the program successfully.\n" );
+            "Ctrl-C or Ctrl-Q exits. HLT or a JUN to its own address ends the program successfully,\n"
+            "unless a timer interrupt (-I) can still be taken.\n" );
 } //usage
 
 static bool number( const char * text, uint64_t & value )
@@ -392,6 +396,18 @@ static bool jump_to_self()
     uint8_t op = rom[ full ];
     return 4 == ( op >> 4 ) && ( ( ( op & 0xf ) << 8 ) | rom[ ( full & 0x1000 ) | ( ( pc + 1 ) & 0xfff ) ] ) == pc;
 } //jump_to_self
+
+// Whether a timer interrupt can still be taken: one is set up, enabled, and not being served.
+static bool interrupt_possible()
+{
+    return g_interruptPeriod && cpu.interruptEnable && !cpu.interruptAcknowledged;
+} //interrupt_possible
+
+// HLT ends the program unless a timer interrupt can end the HLT.
+static bool halted_for_good()
+{
+    return cpu.halted && !interrupt_possible();
+} //halted_for_good
 
 static void report_state()
 {
@@ -449,12 +465,18 @@ int main( int argc, char * argv[] )
             if ( valid && 0 == strncmp( arg, "-a:", 3 ) && value < sizeof rom ) address = value;
             else if ( valid && 0 == strncmp( arg, "-n:", 3 ) && value ) limit = value;
             else if ( valid && 0 == strncmp( arg, "-s:", 3 ) && value ) hz = value;
+            else if ( valid && 0 == strncmp( arg, "-I:", 3 ) && value ) g_interruptPeriod = g_nextInterrupt = value;
             else { fprintf( stderr, "invalid option: %s\n", arg ); return 1; }
         }
         else
             files.push_back( arg );
     }
     if ( files.empty() ) { usage(); return 1; }
+    if ( g_interruptPeriod && I4004::model4040 != model )
+    {
+        fprintf( stderr, "interrupts (-I) need the 4040 (-4)\n" );
+        return 1;
+    }
     if ( address >= 0x1000 && I4004::model4040 != model )
     {
         fprintf( stderr, "entry addresses above 0FFFH need the 4040 (-4)\n" );
@@ -518,12 +540,19 @@ int main( int argc, char * argv[] )
     cpu.power_on( model, (uint16_t) address );
     bool selfJump = false;
     auto start = std::chrono::steady_clock::now();
-    while ( !cpu.halted && !cpu.ended && !g_stopped && ( !limit || cpu.cycles < limit ) )
+    while ( !halted_for_good() && !cpu.ended && !g_stopped && ( !limit || cpu.cycles < limit ) )
     {
         uint64_t budget = hz ? 128 : 65536;
-        for ( uint64_t n = 0; n < budget && !cpu.halted && !cpu.ended && ( !limit || cpu.cycles < limit ); n++ )
+        for ( uint64_t n = 0; n < budget && !halted_for_good() && !cpu.ended && ( !limit || cpu.cycles < limit ); n++ )
         {
-            if ( jump_to_self() )
+            if ( cpu.halted && !cpu.interruptRequest ) // HLT executes NOPs until the next timer interrupt
+                cpu.cycles = std::max( cpu.cycles, g_nextInterrupt );
+            if ( g_interruptPeriod && cpu.cycles >= g_nextInterrupt )
+            {
+                cpu.interruptRequest = true;
+                g_nextInterrupt += g_interruptPeriod * ( 1 + ( cpu.cycles - g_nextInterrupt ) / g_interruptPeriod );
+            }
+            if ( jump_to_self() && !interrupt_possible() ) // a program may idle in a loop while interrupts work
             {
                 selfJump = true;
                 break;

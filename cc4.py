@@ -27,6 +27,8 @@ it too. The language is C without pointers, structures or floating point:
 * Hardware built-ins, compiled inline: __rom_out(chip, v) and __rom_in(chip)
   for the 4001 ROM ports, __ram_out(bank, chip, v) for the 4002 output
   ports, __test() for the TEST pin and __kbp(v) for KBP.
+* With --4040: an __interrupt function for the 4040's interrupt, __ei(),
+  __di() and __halt() for EIN, DIN and HLT, and volatile variables.
 * #include (ignored), #define with or without parameters, #undef, #if,
   #ifdef, #ifndef, #elif, #else and #endif. __CC4__ is predefined.
 """
@@ -285,6 +287,7 @@ class Var:
         self.slot = None  # status register, for scalars
         self.base = None  # main-memory nibble address, for arrays
         self.init = None
+        self.volatile = False
 
 
 class Function:
@@ -292,9 +295,10 @@ class Function:
         self.name, self.ctype, self.line = name, ctype, line
         self.params, self.locals, self.body, self.temps = [], [], None, []
         self.label = self.ret_slot = None
+        self.interrupt = False
 
 
-SPECIFIERS = {'__nibble', 'int', 'char', 'unsigned', 'signed', 'short', 'long', 'void', '_Bool', 'static', 'extern',
+SPECIFIERS = {'__interrupt', '__nibble', 'int', 'char', 'unsigned', 'signed', 'short', 'long', 'void', '_Bool', 'static', 'extern',
               'register', 'auto', 'const', 'volatile', 'float', 'double', 'struct', 'union', 'enum', 'typedef'}
 BINARY = {'||': 1, '&&': 2, '|': 3, '^': 4, '&': 5, '==': 6, '!=': 6, '<': 7, '>': 7, '<=': 7, '>=': 7,
           '<<': 8, '>>': 8, '+': 9, '-': 9, '*': 10, '/': 10, '%': 10}
@@ -347,8 +351,11 @@ class Parser:
         words, line = [], self.peek().line
         while self.at_type():
             words.append(self.next().value)
+        self.qualifiers = set(words)  # volatile and __interrupt, for the declarator
         if not words:
             return None
+        if words == ['__interrupt']:
+            return 'int'
         for word in ('float', 'double', 'struct', 'union', 'enum', 'typedef'):
             if word in words:
                 raise CompileError(f'line {line}: {word} is not supported')
@@ -413,13 +420,14 @@ class Parser:
         elif ctype == 'bool':
             ctype = 'char'  # scalar _Bool: a char that holds 0 or 1
             var = Var(name, ctype, None, function, line)
-            var.boolean = True
+            var.boolean, var.volatile = True, 'volatile' in self.qualifiers
             return var
         var = Var(name, ctype, length, function, line)
-        var.boolean = False
+        var.boolean, var.volatile = False, 'volatile' in self.qualifiers
         return var
 
     def function_definition(self, ctype, name, line):
+        interrupt = '__interrupt' in getattr(self, 'qualifiers', ())
         typed, names = [], []
         if self.accept(')'):
             pass
@@ -463,6 +471,7 @@ class Parser:
         if name in self.functions:
             raise CompileError(f'line {line}: function {name} is defined twice')
         f = Function(name, ctype, line)
+        f.interrupt = interrupt
         self.functions[name] = f
         self.function = f
         self.scopes = [{}]
@@ -2240,11 +2249,15 @@ STORE = {'int': 'QSTI', 'unsigned': 'QSTI', 'char': 'QSTIC', 'bool': 'QSBIT', 'n
 SIGNED_COMPARE = {'<': 'QSLT', '<=': 'QSLE', '>': 'QSGT', '>=': 'QSGE', '==': 'QEQ', '!=': 'QNE'}
 UNSIGNED_COMPARE = {'<': 'QULT', '<=': 'QULE', '>': 'QUGT', '>=': 'QUGE', '==': 'QEQ', '!=': 'QNE'}
 ARITHMETIC = {'+': 'QADD', '-': 'QSUB', '*': 'QMUL', '&': 'QAND', '|': 'QOR', '^': 'QXOR', '<<': 'QSHL'}
-BUILTINS = {'putchar', 'getchar', 'printf', 'puts', '__rom_out', '__rom_in', '__ram_out', '__test', '__kbp'}
-HARDWARE = {'__rom_out': 2, '__rom_in': 1, '__ram_out': 3, '__test': 0, '__kbp': 1}  # built-ins: argument counts
+BUILTINS = {'putchar', 'getchar', 'printf', 'puts', '__rom_out', '__rom_in', '__ram_out', '__test', '__kbp',
+            '__ei', '__di', '__halt'}
+HARDWARE = {'__rom_out': 2, '__rom_in': 1, '__ram_out': 3, '__test': 0, '__kbp': 1,
+            '__ei': 0, '__di': 0, '__halt': 0}  # built-ins: argument counts
+INSTRUCTIONS_4040 = {'__ei': 'EIN', '__di': 'DIN', '__halt': 'HLT'}
 # Helpers that leave A unchanged, so it still holds the variable last loaded or stored.
 KEEPS_A = {'QLDB', 'QLDBI', 'QLDBC', 'QSTA', 'QTST', 'QTEST', 'QNOTZ', 'QODD', 'QEQ', 'QNE', 'QPUTC', 'QSAVE', 'QRSTR'}
-ACCUMULATOR_ONLY = {'LD', 'LDM', 'CLC', 'CMC', 'STC', 'ADD', 'SUB', 'RAL', 'RAR', 'TCC', 'CMA', 'IAC', 'DAC'}
+ACCUMULATOR_ONLY = {'LD', 'LDM', 'CLC', 'CMC', 'STC', 'ADD', 'SUB', 'RAL', 'RAR', 'TCC', 'CMA', 'IAC', 'DAC',
+                    'EIN', 'DIN', 'HLT'}
 MIRROR = {'<': '>', '>': '<', '<=': '>=', '>=': '<=', '==': '==', '!=': '!='}
 LEAVES_SLOT_IN_A = {'QLDA', 'QSTA', 'QSTAC', 'QINCV', 'QINCC', 'QDECV', 'QDECC'}
 MEMORY_NIBBLES = 2048
@@ -2252,9 +2265,9 @@ STATUS_REGISTERS = 128
 
 
 class Compiler:
-    def __init__(self, source, name='program'):
+    def __init__(self, source, name='program', cpu='4004'):
         self.source_lines = source.splitlines()
-        self.name = name
+        self.name, self.cpu = name, cpu
         tokens = Preprocessor().run(source)
         self.globals, self.functions = Parser(tokens).program()
         if 'main' not in self.functions:
@@ -2271,6 +2284,9 @@ class Compiler:
         self.analyze()
         self.allocate_memory()
         body = []
+        if self.handler:
+            self.return_sites.append('QINTR')
+            self.used.add('QSTAC')
         for f in self.reachable:
             self.code = []
             self.live = live_after_calls(f)
@@ -2316,6 +2332,10 @@ class Compiler:
                         work.append(callee)
             self.reach[name] = seen
         order = ['main'] + sorted(self.reach['main'], key=lambda n: self.functions[n].line)
+        self.handler = self.interrupt_handler()
+        if self.handler:
+            served = [self.handler.name] + sorted(self.reach[self.handler.name], key=lambda n: self.functions[n].line)
+            order += served
         self.reachable = [self.functions[n] for n in order]
         self.recursive = any(f.name in self.reach[f.name] for f in self.reachable)
         self.infer_narrow()
@@ -2328,6 +2348,30 @@ class Compiler:
                 label = f'F{i:04d}'
             keys.add(label)
             f.label = label
+
+    def interrupt_handler(self):
+        """The __interrupt function, checked, or None."""
+        handlers = [f for f in self.functions.values() if f.interrupt]
+        if not handlers:
+            return None
+        f = handlers[0]
+        where = f'line {f.line}: '
+        if len(handlers) > 1:
+            raise CompileError(where + 'a program has one __interrupt function')
+        if self.cpu != '4040':
+            raise CompileError(where + 'interrupts need the 4040 (--4040)')
+        if f.name == 'main' or f.ctype != 'void' or f.params:
+            raise CompileError(where + 'the __interrupt function must be void, take no parameters and not be main')
+        callers = [g.name for g in self.functions.values() if f.name in g.calls]
+        if callers:
+            raise CompileError(where + f'{f.name} is the __interrupt function and cannot be called ({callers[0]})')
+        shared = sorted(self.reach[f.name] & (self.reach['main'] | {'main'}))
+        if shared:
+            raise CompileError(where + f'{shared[0]} is called by both main and the __interrupt function; an '
+                               'interrupt would overwrite its variables')
+        if any(g in self.reach[g] for g in self.reach[f.name] | {f.name}):
+            raise CompileError(where + 'the __interrupt function cannot reach a recursive function')
+        return f
 
     def infer_narrow(self):
         """Find the variables and functions whose values always fit in 8 bits, and in
@@ -2440,6 +2484,9 @@ class Compiler:
 
     def allocate_slots(self):
         slots = [slot for slot, _ in self.global_slots]
+        if self.handler:  # the interrupted program's R8-R15, and its accumulator, carry and RAM bank
+            self.interrupt_slots = [Slot('interrupt save') for _ in range(3)]
+            slots += self.interrupt_slots
         for f in self.reachable:
             slots += self.frame(f) + f.temps
         if len(slots) + 1 > STATUS_REGISTERS:
@@ -2450,6 +2497,11 @@ class Compiler:
         self.slots_used = len(slots) + 1
 
     def startup(self):
+        if self.handler:  # an interrupt starts at 003H
+            self.op('JUN', 'QSTRT')
+            self.op('NOP')
+            self.op('JUN', 'QINT')
+            self.place('QSTRT')
         banks = max((self.slots_used - 1) // 16, (max(self.memory_top, 1) - 1) // 256) + 1
         self.comment('clear the RAM')
         self.op('LDM', (16 - banks) & 15)
@@ -2542,6 +2594,8 @@ class Compiler:
         self.load_slot(v.slot, 'QSTAC' if v.ctype == 'char' else 'QSTA')
 
     def load_var(self, v):
+        if v.volatile:  # an interrupt may change it: always load it
+            self.a_holds = None
         if v.ctype != 'nibble':
             return self.load_slot(v.slot)
         if self.a_holds is v:
@@ -3108,6 +3162,10 @@ class Compiler:
     def hardware(self, e):
         """The built-ins for the I/O ports, the TEST pin and KBP."""
         name, args = e.name, e.args
+        if name in INSTRUCTIONS_4040:
+            if self.cpu != '4040':
+                raise CompileError(f'line {e.line}: {name} needs the 4040 (--4040)')
+            return self.op(INSTRUCTIONS_4040[name])
         if name == '__test':  # 1 when the TEST pin is high
             self.call('QTEST')
             self.call('QBOOL')
@@ -3252,12 +3310,26 @@ class Compiler:
         self.op('FIM', 0, f'{label} AND 0FFH')
         self.op('JMS', f'QS{number + 1}')
 
+    def interrupt_entry(self):
+        save, restore = [], []
+        for slot, registers in zip(self.interrupt_slots, ((8, 9, 10, 11), (12, 13, 14, 15), (5, 6, 7))):
+            select = [f'        FIM 0,{number(slot.address())}', '        LD 1', '        DCL', '        SRC 0']
+            save += select
+            restore += select
+            for k, register in enumerate(registers):
+                save += [f'        LD {register}', f'        WR{k}']
+                restore += [f'        RD{k}', f'        XCH {register}']
+        return INTERRUPT_ENTRY.format(save='\n'.join(save), restore='\n'.join(restore), number=number(4),
+                                      ret=number(self.handler.ret_slot.address()), handler=self.handler.label)
+
     # statements
 
     def epilogue(self):
         f = self.function
         if f.name == 'main':
             self.used.add('QEXIT')
+            if self.handler:
+                self.op('DIN')  # no more interrupts, so the jump to itself ends the program
             self.op('JUN', 'QEXIT')
         else:
             self.op('FIM', 0, f.ret_slot)
@@ -3365,7 +3437,8 @@ class Compiler:
 
     def output(self):
         end, long, pads = self.layout(self.code)
-        lines = [f'; {self.name.upper()}: COMPILED FROM C BY CC4.PY', '        ORG 0']
+        target = ' FOR THE 4040' if self.cpu == '4040' else ''
+        lines = [f'; {self.name.upper()}: COMPILED FROM C BY CC4.PY{target}', '        ORG 0']
         for i, item in enumerate(self.code):
             if item[0] == 'label':
                 lines.append(f'{item[1]}:')
@@ -3404,6 +3477,8 @@ class Compiler:
             if block and id(block) not in seen:
                 seen.add(id(block))
                 blocks.append((block['text'], block['align']))
+        if self.handler:
+            blocks.append((self.interrupt_entry(), False))
         if self.return_sites:
             if len(self.return_sites) > (256 - DISPATCH_FIXED) // 2:
                 raise CompileError(f'too many calls ({len(self.return_sites)}); the return table holds '
@@ -3454,9 +3529,33 @@ def fixed(line):
     return line
 
 
-def compile_source(source, name='program'):
+INTERRUPT_ENTRY = '''; THE 4040'S INTERRUPT: REGISTER BANK 1 KEEPS THE PROGRAM'S R0-R7; SAVE ITS
+; ACCUMULATOR, CARRY, RAM BANK AND R8-R15, CALL THE HANDLER, AND RESTORE THEM.
+; BBS RESTORES THE SRC ADDRESS AND REGISTER BANK.
+QINT:   SB1
+        XCH 7
+        TCC
+        XCH 6
+        LCR
+        XCH 5
+{save}
+        FIM 6,{number}
+        FIM 0,{ret}
+        JMS QSTAC
+        JUN {handler}
+QINTR:
+{restore}
+        LD 5
+        DCL
+        LD 6
+        RAR
+        LD 7
+        BBS'''
+
+
+def compile_source(source, name='program', cpu='4004'):
     """Return (assembly text, compiler) for C source."""
-    compiler = Compiler(source, name)
+    compiler = Compiler(source, name, cpu)
     return compiler.compile(), compiler
 
 
@@ -3465,14 +3564,16 @@ def main():
     parser.add_argument('source', type=Path)
     parser.add_argument('-o', '--output', type=Path, help='HEX path (default: source.hex); .asm and .map go beside it')
     parser.add_argument('-S', dest='assembly_only', action='store_true', help='write only the MAC4 source')
+    parser.add_argument('--4040', dest='cpu', action='store_const', const='4040', default='4004',
+                        help='compile for the 4040: interrupts, __ei, __di and __halt')
     parser.add_argument('--stats', action='store_true', help='report ROM and RAM use')
     args = parser.parse_args()
     try:
-        text, compiler = compile_source(args.source.read_text(encoding='utf-8'), args.source.stem)
+        text, compiler = compile_source(args.source.read_text(encoding='utf-8'), args.source.stem, args.cpu)
         destination = args.output or args.source.with_suffix('.hex')
         destination.with_suffix('.asm').write_text(text, encoding='ascii', newline='\n')
         if not args.assembly_only:
-            memory, symbols, _ = asm4.Assembler('4004').assemble(text)
+            memory, symbols, _ = asm4.Assembler(args.cpu).assemble(text)
             destination.write_text(asm4.hex_file(memory), encoding='ascii', newline='\n')
             destination.with_suffix('.map').write_text(asm4.map_file(symbols), encoding='ascii', newline='\n')
         if args.stats:

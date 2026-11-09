@@ -22,7 +22,7 @@ of this repository.
 | `asm4.py` | Assembler for Intel's MAC4 and MAC40 language, checked against them byte for byte. |
 | `cc4.py` | Compiler for a subset of C, producing MAC4 source and assembling it with asm4.py. |
 | `examples/` | hello, echo, fib, and the sieve, e and ttt benchmarks, with their HEX and symbol maps. |
-| `examples/c/` | hello, a pedestrian crossing, eight queens, the Towers of Hanoi, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
+| `examples/c/` | hello, a pedestrian crossing, a 4040 clock run by interrupts, eight queens, the Towers of Hanoi, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
 | `intel/` | Runs Intel's MAC4, MAC40 and INTERP/4 from Tymshare tape 169278 on a PDP-10 runner; not bundled. |
 | `tests/` | CPU tests from the MCS-40 manual, and comparisons with MAC4 and INTERP/4. |
 
@@ -56,10 +56,13 @@ Options:
 | `-p` | report instruction cycles, elapsed time and the 740 kHz runtime |
 | `-r` | report the final registers, stack and RAM on stderr |
 | `-o` | show writes to the other ROM ports and the RAM output ports as lamps, bit 3 first: `ROM port 0: .*.*` |
+| `-I:cycles` | 4040: request an interrupt every this many instruction cycles, like a timer chip |
 | `-t`, `-i` | trace to `ntv4004.log`; `-i` adds every instruction, labeled from an adjacent `.map` (or `-m:file`), which names an address that has several labels by the first |
 
 A program ends successfully with `HLT` (4040) or a `JUN` to its own address,
-the usual way to stop a 4004. Ctrl-C or Ctrl-Q also exits.
+the usual way to stop a 4004, unless an `-I` interrupt can still be taken:
+then `HLT` waits for it, and a program may idle in a loop while its
+interrupts work. Ctrl-C or Ctrl-Q also exits.
 
 ### The console
 
@@ -99,8 +102,14 @@ ntv4004 follows Intel's
 * The 4040 adds seven return levels, a second bank of R0–R7 (`SB0`, `SB1`),
   a second 4K ROM bank (`DB0`, `DB1`, taking effect on the third cycle after,
   so a following `JUN` or `JMS` crosses banks), `HLT`, `OR4`, `OR5`, `AN6`,
-  `AN7`, `LCR`, `EIN`, `DIN`, `BBS` and `RPM`. No interrupt source or 4289
-  program memory is attached, so `RPM` reads 0.
+  `AN7`, `LCR`, `EIN`, `DIN`, `BBS` and `RPM`. No 4289 program memory is
+  attached, so `RPM` reads 0.
+* A 4040 interrupt, with `-I`, is taken after `EIN`: one more instruction
+  runs, then a forced `JMS 003H` saves the `SRC` address and the register
+  bank, and `BBS` restores them. No other interrupt is taken until `BBS`,
+  nor in the three cycles after `DB0` or `DB1`. An interrupt ends a `HLT`,
+  which executes NOPs until then. The accumulator, carry, RAM bank and
+  R8–R15 are the program's to save.
 
 ## Assembler
 
@@ -231,6 +240,37 @@ road green; press a key to cross
 ROM port 0: ..*.
 ROM port 1: ..*.
 road amber
+```
+
+### Interrupts
+
+`--4040` compiles for the 4040, which adds an interrupt and `HLT`. One
+function marked `__interrupt` handles the interrupt:
+
+| Addition | Does |
+| --- | --- |
+| `__interrupt void f(void)` | runs `f` for each interrupt |
+| `__ei()`, `__di()` | `EIN` and `DIN`: allow interrupts or not; they start disabled |
+| `__halt()` | `HLT`: wait for the next interrupt |
+| `volatile` | load a variable each time it is read, as an interrupt may change it |
+
+The compiler puts a jump at 003H to entry code that selects register bank
+1, so the program's R0–R7 are left alone; saves its accumulator, carry, RAM
+bank and R8–R15 in three status registers; calls the handler like any C
+function; restores them; and returns with `BBS`. That costs 131
+instruction cycles. The handler cannot be called, and the functions it calls
+must not be recursive or called by `main`, since an interrupt would
+overwrite their variables. A variable wider than a nibble can change between
+one nibble and the next of a read, so read shared ones with interrupts off.
+`main` ends with `DIN`, so its final jump ends the program.
+
+[clock.c](examples/c/clock.c) counts tenths of a second in its handler,
+from `-I:9259`, a tenth of a second at 740 kHz, while `main` sleeps in `HLT`
+and prints each second:
+
+```sh
+python3 cc4.py --4040 examples/c/clock.c
+./ntv4004 -4 -I:9259 -s:740000 -o examples/c/clock.hex
 ```
 
 ## Examples

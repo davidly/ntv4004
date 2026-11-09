@@ -90,7 +90,7 @@ class Assembler(unittest.TestCase):
         for path in sorted((ROOT / 'examples').glob('*.asm')) + sorted((ROOT / 'examples' / 'c').glob('*.asm')):
             with self.subTest(example=path.name):
                 source = path.read_text(encoding='ascii')
-                self.compare(source, '4040' if '4040' in path.stem else '4004')
+                self.compare(source, '4040' if '4040' in path.stem or 'FOR THE 4040' in source[:80] else '4004')
 
     def test_errors(self):
         for source, message in (('        LDM 16\n', 'out of range'), ('        FIM 3,1\n', 'even register'),

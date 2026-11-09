@@ -31,6 +31,7 @@ void I4004::power_on( Model model, uint16_t address )
     cm = 0;
     test = false;
     registerBank1 = interruptEnable = false;
+    interruptRequest = interruptAcknowledged = m_interruptArmed = false;
     halted = ended = false;
     cycles = 0;
     m_bankDelay = 0;
@@ -84,6 +85,7 @@ unsigned I4004::execute( uint16_t address, uint8_t op )
                     pop();
                     src = m_savedSrc;
                     registerBank1 = m_savedRegisterBank1;
+                    interruptAcknowledged = false;
                     return 1;
                 case 0x3: acc = (uint8_t) ( ( romBank1 ? 8 : 0 ) | cm ); return 1; // LCR
                 case 0x4: acc |= reg( 4 ); return 1;                           // OR4
@@ -209,6 +211,32 @@ unsigned I4004::step()
 {
     if ( m_bankDelay <= 0 && romBank1 != m_pendingRomBank1 && model4040 == m_model )
         romBank1 = m_pendingRomBank1;
+    // A 4040 interrupt forces a JMS to 003H of the current ROM bank, saving the SRC address and
+    // the index register bank for BBS. None is taken while one is being served, or in the three
+    // cycles after DB0 or DB1. Once one can be taken, one more instruction runs first: the
+    // interrupt flip-flop is set during it. It also ends a HLT, which executes NOPs until then.
+    bool takeable = interruptRequest && interruptEnable && !interruptAcknowledged && m_bankDelay <= 0 &&
+                    model4040 == m_model;
+    if ( takeable && m_interruptArmed )
+    {
+        m_interruptArmed = false;
+        interruptRequest = false;
+        interruptAcknowledged = true;
+        halted = false;
+        m_savedSrc = src;
+        m_savedRegisterBank1 = registerBank1;
+        if ( m_tracer )
+            m_tracer->Trace( "interrupt at %03X\n", pc() );
+        push( 3 );
+        cycles += 2;
+        return 2;
+    }
+    m_interruptArmed = takeable;
+    if ( halted )
+    {
+        cycles++;
+        return 1;
+    }
     uint16_t address = pc();
     if ( m_trace && m_tracer )
         trace_state();

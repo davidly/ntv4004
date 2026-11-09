@@ -212,6 +212,31 @@ class Console(unittest.TestCase):
         self.assertEqual(run(source, options=('-o',))[1], b'ROM port 3: .*.*\nRAM bank 2 chip 1: **..\n')
         self.assertEqual(run(source)[1], b'')
 
+    def test_interrupts(self):
+        # A timer interrupt forces JMS 003H and ends a HLT; BBS returns, restoring the SRC address.
+        handler = '        ORG 0\n        JUN START\n        NOP\n        INC 15\n        BBS\n'
+        count = 'START:  FIM 0,0F0H\n        SRC 0\n        EIN\nWAIT:   HLT\n        LD 15\n' + \
+                ''.join('        DAC\n' for _ in range(5)) + '        JCN 0CH,WAIT\n        DIN\n' + end()
+        state, _, code = run(handler + count, '4040', options=('-I:1000',))
+        self.assertEqual((state['regs'][15], state['src'], state['sp'], state['cycles'], code), (5, 0xF0, 0, 5014, 0))
+        # Without EIN no interrupt is taken, so HLT ends the program.
+        state, _, _ = run(handler + count.replace('        EIN\n', ''), '4040', options=('-I:1000',))
+        self.assertEqual((state['regs'][15], state['pc']), (0, 0x9))
+        # No interrupt is taken while one is served: a handler longer than the period runs to BBS each time.
+        slow = ('        ORG 0\n        JUN START\n        NOP\n        JUN SLOW\nSLOW:   INC 15\n        FIM 0,0\n'
+                'SPIN:   ISZ 1,SPIN\n        ISZ 0,SPIN\n        BBS\n')
+        spin = 'START:  EIN\nMAIN:   ISZ 3,MAIN\n        DIN\n' + end()
+        state, _, code = run(slow + spin, '4040', options=('-I:20',))
+        self.assertEqual((state['regs'][15], state['sp'], code), (7, 0, 0))  # one main instruction between each
+        # BBS restores the index register bank; a jump to itself waits while an interrupt can still come.
+        bank = ('        ORG 0\n        JUN START\n        NOP\n        SB0\n        INC 14\n        LD 14\n'
+                '        DAC\n        DAC\n        DAC\n        JCN 0CH,BACK\n        DIN\nBACK:   BBS\n'
+                'START:  SB1\n        LDM 9\n        XCH 0\n        EIN\n' + end())
+        state, _, code = run(bank, '4040', options=('-I:50',))
+        self.assertEqual((state['regs'][14], state['bank1'][0], code), (3, 9, 0))
+        result = subprocess.run([str(NTV), '-I:50', 'none.hex'], capture_output=True, timeout=60)
+        self.assertIn(b'need the 4040', result.stderr)
+
     def test_examples(self):
         expected = {
             'hello': b'Hello from the Intel 4004!\n',

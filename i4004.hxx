@@ -24,6 +24,8 @@ struct I4004
     uint8_t cm;            // command lines from DCL: the RAM bank
     bool test;             // TEST pin; JCN condition 1 jumps when it is 0
     bool registerBank1, romBank1, interruptEnable;
+    bool interruptRequest;      // the 4040's INTERRUPT input, latched until the interrupt is taken
+    bool interruptAcknowledged; // set when an interrupt is taken; BBS clears it, and none is taken while set
     bool halted, ended;
     uint64_t cycles;       // instruction cycles (8 clock periods each)
 
@@ -54,6 +56,7 @@ private:
     bool m_pendingRomBank1 = false;
     uint8_t m_savedSrc = 0;     // SRC and register bank saved by an interrupt, restored by BBS
     bool m_savedRegisterBank1 = false;
+    bool m_interruptArmed = false; // an interrupt could be taken at the last instruction: take it at this one
 
     uint8_t fetch();
     uint16_t full_address( uint16_t address ) const { return ( romBank1 ? 0x1000 : 0 ) | ( address & 0xfff ); }
