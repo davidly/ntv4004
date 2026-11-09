@@ -88,6 +88,8 @@ session. Every result matches ntv4004 exactly, including the cycle counts:
 | ttt | `moves: 6493`, `iterations: 1` | 1,185,782 |
 | c/hello, compiled by cc4.py | `Hello from C on the Intel 4004!` | 1,775 |
 | c/ttt, compiled by cc4.py | `move count:      6493`, `iteration count: 1` | 11,951,902 |
+| c/queens, compiled by cc4.py | the first solution, then `92 solutions` | 5,538,133 |
+| c/hanoi, compiled by cc4.py | the moves for 3 discs, then the counts for 3 and 10 | 1,167,360 |
 
 ### INTERP's commands and object format
 

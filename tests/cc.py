@@ -328,6 +328,35 @@ def e_digits(count):
         return str(Decimal(1).exp()).replace('.', '')[:count]
 
 
+def queens(n=8):
+    """queens.c's output: the first solution's board, then the count."""
+    found = []
+
+    def place(row, columns):
+        if row == n:
+            found.append(columns)
+            return
+        for col in range(n):
+            if all(col != c and abs(col - c) != row - r for r, c in enumerate(columns)):
+                place(row + 1, columns + [col])
+    place(0, [])
+    board = ''.join(''.join('Q' if c == col else '.' for c in range(n)) + '\n' for col in found[0])
+    return board + f'{len(found)} solutions\n'
+
+
+def hanoi():
+    """hanoi.c's output."""
+    lines = []
+
+    def move(discs, source, target, spare):
+        if discs:
+            move(discs - 1, source, spare, target)
+            lines.append(f'disc {discs} from {source} to {target}\n')
+            move(discs - 1, spare, target, source)
+    move(3, 'A', 'C', 'B')
+    return ''.join(lines) + '3 discs: 7 moves\n10 discs: 1023 moves\n'
+
+
 PROGRAMS = {
     'loops': ('''
 int main()
@@ -551,6 +580,8 @@ class Compiler(unittest.TestCase):
         self.assertEqual(run_c(example('hello')), 'Hello from C on the Intel 4004!\n')
         self.assertEqual(run_c(example('sieve'), 200_000_000), '1899 primes.\n')
         self.assertEqual(run_c(example('ttt'), 200_000_000), 'move count:      6493\niteration count: 1\n')
+        self.assertEqual(run_c(example('queens')), queens())
+        self.assertEqual(run_c(example('hanoi')), hanoi())
         output = run_c(example('e'), 200_000_000)
         digits, done = output.split('\n', 1)
         self.assertEqual(digits, e_digits(len(digits)))

@@ -22,7 +22,7 @@ of this repository.
 | `asm4.py` | Assembler for Intel's MAC4 and MAC40 language, checked against them byte for byte. |
 | `cc4.py` | Compiler for a subset of C, producing MAC4 source and assembling it with asm4.py. |
 | `examples/` | hello, echo, fib, and the sieve, e and ttt benchmarks, with their HEX and symbol maps. |
-| `examples/c/` | hello, a pedestrian crossing, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
+| `examples/c/` | hello, a pedestrian crossing, eight queens, the Towers of Hanoi, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
 | `intel/` | Runs Intel's MAC4, MAC40 and INTERP/4 from Tymshare tape 169278 on a PDP-10 runner; not bundled. |
 | `tests/` | CPU tests from the MCS-40 manual, and comparisons with MAC4 and INTERP/4. |
 
@@ -183,6 +183,15 @@ and `char` elsewhere:
 | [e](examples/c/e.c) | 818 bytes | 29,482,646 | 319 s | 2.9 times as long |
 | [sieve](examples/c/sieve.c) | 622 bytes | 55,126,050 | 596 s | 7.7 times |
 | [ttt](examples/c/ttt.c) | 1,701 bytes | 11,951,902 | 129 s | 10.1 times |
+| [queens](examples/c/queens.c) | 1,152 bytes | 5,538,133 | 60 s | |
+| [hanoi](examples/c/hanoi.c) | 983 bytes | 1,167,360 | 13 s | |
+
+queens counts the 92 solutions to the eight queens problem by recursive
+backtracking, with packed `_Bool` arrays for the columns and diagonals, and
+shows the first. hanoi prints the moves for three discs of the Towers of
+Hanoi and counts them for ten, recursing eleven deep. Like ttt, both use
+`__nibble` under this compiler and `char` elsewhere, and print what gcc's
+builds of the same sources print.
 
 e comes closest because most of its time goes to division, which the library
 does much as the hand-written code does. ttt falls furthest behind: each

@@ -206,6 +206,8 @@ class Interp(unittest.TestCase):
         compiled = examples / 'c'
         self.assertEqual(self.run_both(compiled / 'hello.hex'), b'Hello from C on the Intel 4004!\n')
         self.assertEqual(self.run_both(compiled / 'ttt.hex'), b'move count:      6493\niteration count: 1\n')
+        self.assertTrue(self.run_both(compiled / 'queens.hex').endswith(b'\n92 solutions\n'))
+        self.assertTrue(self.run_both(compiled / 'hanoi.hex').endswith(b'10 discs: 1023 moves\n'))
 
     def test_status_port(self):
         # Poll port 14 before each character; INTERP's answers follow the program's reads.
