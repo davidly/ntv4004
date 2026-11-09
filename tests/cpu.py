@@ -41,7 +41,7 @@ def run(source, cpu='4004', keys=None, options=()):
              'bank1': [int(c, 16) for c in bank1], 'pc': int(pc, 16), 'sp': int(sp),
              'stack': [int(s, 16) for s in stack.split()], 'src': int(src, 16), 'cm': int(cm),
              'cycles': int(cycles), 'ram': ram}
-    return state, result.stdout, result.returncode
+    return state, result.stdout.replace(b'\r\n', b'\n'), result.returncode  # Windows writes CRLF
 
 
 def end():
