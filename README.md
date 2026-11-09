@@ -408,5 +408,7 @@ between the nibbles of a longer subtraction.
 * `tests/asm.py` and `tests/interp.py` compare asm4.py with Intel's MAC4 and
   ntv4004 with Intel's INTERP/4 and INTERP/40 on 300 random programs and the
   examples, requiring identical registers, RAM, port writes and cycle counts.
-  They include the compiler's output.
+  They include the compiler's output and the five small BASIC examples (hello,
+  count, Fibonacci, squares and input), checking BASIC output and cycle counts
+  against ntv4004.
   They skip without the images; see [intel/README.md](intel/README.md).
