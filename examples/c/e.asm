@@ -4,7 +4,6 @@
         LDM 0CH
         XCH 0DH
         JMS QCLR
-        JUN MAIN
 MAIN:
 ; MAIN
 ; INT N;
@@ -142,8 +141,7 @@ L0008:
         FIM 4,0
         FIM 6,0
         JUN QEXIT
-        JUN QEXIT
-        ORG 0DCH
+        ORG 0D8H
 ; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
 QTST:   LD 4
         JCN 0CH,QTT
@@ -165,14 +163,20 @@ QNOTZ:  LD 4
         JCN 0CH,QZF
         BBL 1
 QZF:    BBL 0
-        ORG 0F8H
-; DECREMENT THE INT AT R0R1, LEAVING IT IN A.
-QDECV:  JMS QLDA
-        JMS QDEC
-        JUN QSTA
-        ORG 0FEH
-; THE END OF THE PROGRAM: A JUMP TO ITSELF.
-QEXIT:  JUN QEXIT
+        ORG 0F4H
+; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
+QLDA:   LD 1
+        DCL
+        SRC 0
+        RD0
+        XCH 4
+        RD1
+        XCH 5
+        RD2
+        XCH 6
+        RD3
+        XCH 7
+        BBL 0
         ORG 0100H
 ; PRINT A IN DECIMAL, SIGNED (QPRTD) OR UNSIGNED (QPRTU). QPDIG PRINTS THE
 ; NUMBER OF TIMES B GOES INTO A, AND LEAVES THE REST, UNLESS IT IS A
@@ -386,18 +390,18 @@ QSP3:   LD 0
         XCH 0
 QSP2:   BBL 0
         ORG 01F4H
-; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
-QLDA:   LD 1
+; B = THE STATUS REGISTER AT R0R1.
+QLDB:   LD 1
         DCL
         SRC 0
         RD0
-        XCH 4
+        XCH 8
         RD1
-        XCH 5
+        XCH 9
         RD2
-        XCH 6
+        XCH 10
         RD3
-        XCH 7
+        XCH 11
         BBL 0
         ORG 0200H
 ; COMPARE A WITH B, RETURNING 1 OR 0 IN THE ACCUMULATOR. THE SIGNED
@@ -637,6 +641,9 @@ QADD:   CLC
         ADD 8
         XCH 4
         BBL 0
+        ORG 02FBH
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
         ORG 0300H
 ; A = A << 1.
 QSHL1:  CLC
@@ -669,20 +676,6 @@ QXAB:   LD 4
         XCH 7
         BBL 0
         ORG 031BH
-; B = THE STATUS REGISTER AT R0R1.
-QLDB:   LD 1
-        DCL
-        SRC 0
-        RD0
-        XCH 8
-        RD1
-        XCH 9
-        RD2
-        XCH 10
-        RD3
-        XCH 11
-        BBL 0
-        ORG 0327H
 ; A = A % B UNSIGNED.
 QUMOD:  JMS QUDIV
 QREMA:  LD 12
@@ -694,4 +687,9 @@ QREMA:  LD 12
         LD 15
         XCH 7
         BBL 0
+        ORG 0326H
+; DECREMENT THE INT AT R0R1, LEAVING IT IN A.
+QDECV:  JMS QLDA
+        JMS QDEC
+        JUN QSTA
         END

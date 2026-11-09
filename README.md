@@ -1,7 +1,7 @@
 # ntv4004
 
 A portable Intel 4004 and 4040 emulator, a MAC4-compatible assembler, a
-compiler for a subset of C, and runnable examples, with Intel's own 1970s assemblers and simulator as
+compiler for a subset of C, a small BASIC interpreter, and runnable examples, with Intel's own 1970s assemblers and simulator as
 optional local references. The emulator implements both instruction sets,
 4K (4004) or 8K (4040) of ROM, 4002 RAM, a console on a ROM I/O port,
 instruction tracing and instruction-cycle accounting.
@@ -24,6 +24,7 @@ of this repository.
 | `cc4.py` | Compiler for a subset of C, producing MAC4 source and assembling it with asm4.py. |
 | `examples/` | hello, echo, fib, and the sieve, e and ttt benchmarks, with their HEX and symbol maps. |
 | `examples/c/` | hello, a pedestrian crossing, a 4040 clock run by interrupts, eight queens, the Towers of Hanoi, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
+| `basic/` | Native 4004 BASIC interpreter, its C source and generated ROM image, and BASIC examples. |
 | `intel/` | Runs Intel's MAC4, MAC40 and INTERP/4 from Tymshare tape 169278 on a PDP-10 runner; not bundled. |
 | `tests/` | CPU tests from the MCS-40 manual, and comparisons with MAC4 and INTERP/4. |
 
@@ -80,6 +81,52 @@ selects a ROM chip's port by the high nibble of a register pair, and `WRR` and
 Other ROM ports read 0. Writes to them and to the 4002 output ports (`WMP`)
 appear in the `-t` log, and with `-o` on stdout. The `TEST` pin is 0.
 
+## Small BASIC interpreter
+
+`basic/basic.hex` runs on the original 4004 and interprets BASIC source read
+through the emulated console. There is no host-side BASIC parser or compiler.
+It supports 26 unsigned 16-bit variables, one 200-element integer array, `LET`, `PRINT`, `INPUT`,
+`IF ... THEN`, `GOTO`, `REM` and `END`. Type numbered lines in increasing order,
+then `RUN`; the stored program executes once and stops.
+
+```sh
+./ntv4004 -l:basic/examples/hello.bas basic/basic.hex
+./ntv4004 -p -l:basic/examples/fib.bas basic/basic.hex
+./ntv4004 -l:basic/examples/input.bas basic/basic.hex
+./ntv4004 -p -l:basic/examples/e.bas basic/basic.hex
+./ntv4004 -p -l:basic/examples/sieve.bas basic/basic.hex
+./ntv4004 -p -l:basic/examples/ttt.bas basic/large.hex
+python3 basic/build.py --all                # rebuild both interpreter ROMs
+```
+
+The examples include counting, Fibonacci, squares, numerical input and a
+192-digit decimal-spigot e benchmark, plus a ten-pass segmented sieve counting
+1899 odd primes. The sieve uses the same 200-element array and fits in 32 lines
+and 381 stored bytes. `@(I)` accesses the array and a trailing
+semicolon on `PRINT` suppresses the newline. The interpreter requires `--size`
+to fit in 4 KB of ROM. Programs
+are limited to 32 lines and 384 bytes of statement text including terminators.
+Keywords and variable names are uppercase; arithmetic wraps at 16 bits and has
+ordinary multiplication/division precedence. Strings are supported by `PRINT`.
+TTT uses the alternative `large.hex` profile: a 64-element array, 832 bytes of
+packed program storage, line numbers 1–255, and no `INPUT`. Its iterative
+alpha-beta search checks all three distinct openings and reports 6493 moves.
+Both interpreter profiles fit the original 4004 ROM and RAM limits.
+See [basic/README.md](basic/README.md) for the complete syntax, limits and errors.
+
+Measured BASIC benchmark runtimes include loading and executing the source on
+the emulated 4004. Estimated hardware times use a 740 kHz clock and exclude I/O
+waits; these are instruction cycles, each taking eight clock periods.
+
+| BASIC benchmark | Workload | Interpreter ROM | Instruction cycles | 740 kHz 4004 |
+| --- | --- | --- | ---: | ---: |
+| [sieve](basic/examples/sieve.bas) | Ten segmented passes; 1899 odd primes from 3 through 16383 | `basic.hex` | 10,226,103,030 | 110,552.47 s (30 h 43 min) |
+| [e](basic/examples/e.bas) | 192 digits using the factorial-series spigot | `basic.hex` | 878,684,673 | 9,499.29 s (2 h 38 min) |
+| [ttt](basic/examples/ttt.bas) | One iteration over three distinct openings; 6493 moves | `large.hex` | 8,380,921,620 | 90,604.56 s (25 h 10 min) |
+
+The BASIC sieve uses segmentation to fit its 200-element array, so its timing
+should be reported separately from the unsegmented assembly and C versions.
+
 ## The CPU
 
 ntv4004 follows Intel's
@@ -133,6 +180,7 @@ instruction and operand.
 python3 cc4.py examples/c/ttt.c         # writes ttt.asm, ttt.hex and ttt.map
 ./ntv4004 -p examples/c/ttt.hex
 python3 cc4.py --stats prog.c           # also report ROM and RAM use
+python3 cc4.py --size --stats prog.c    # smaller ROM, modest extra cycles
 python3 cc4.py -S prog.c                # write only the MAC4 source
 ```
 
@@ -187,14 +235,14 @@ array, since 8,191 `char`s would need eight times the 4002s' memory. ttt's
 `main` takes no arguments, and its `ttype` is `__nibble` under this compiler
 and `char` elsewhere:
 
-| Program | Code + library | Instruction cycles | 740 kHz 4004 | Hand-written assembly |
+| Program | ROM footprint | Instruction cycles | 740 kHz 4004 | Hand-written assembly |
 | --- | ---: | ---: | ---: | ---: |
-| [hello](examples/c/hello.c) | 94 bytes | 1,775 | 0.02 s | |
-| [e](examples/c/e.c) | 818 bytes | 29,482,646 | 319 s | 2.9 times as long |
-| [sieve](examples/c/sieve.c) | 622 bytes | 55,126,050 | 596 s | 7.7 times |
-| [ttt](examples/c/ttt.c) | 1,701 bytes | 11,951,902 | 129 s | 10.1 times |
-| [queens](examples/c/queens.c) | 1,152 bytes | 5,538,133 | 60 s | |
-| [hanoi](examples/c/hanoi.c) | 983 bytes | 1,167,360 | 13 s | |
+| [hello](examples/c/hello.c) | 90 bytes | 1,773 | 0.02 s | |
+| [e](examples/c/e.c) | 812 bytes | 29,482,644 | 319 s | 2.9 times as long |
+| [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s | 7.7 times |
+| [ttt](examples/c/ttt.c) | 1,688 bytes | 11,958,168 | 129 s | 10.1 times |
+| [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s | |
+| [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s | |
 
 queens counts the 92 solutions to the eight queens problem by recursive
 backtracking, with packed `_Bool` arrays for the columns and diagonals, and
@@ -208,6 +256,35 @@ does much as the hand-written code does. ttt falls furthest behind: each
 recursive call saves and restores five status registers (eight with `char`
 instead of `__nibble`), which the hand-written version avoids by keeping
 each depth's frame in its own RAM register.
+
+### Smaller ROMs
+
+All builds remove unreachable instructions after unconditional jumps and jumps
+whose target is the next instruction. Labels remain entry points, including
+indirect software-call continuations and the 4040's fixed interrupt vector.
+The regenerated examples above use this default mode.
+
+`--size` additionally shares repeated `FIM 0,address` / `JMS helper` pairs through
+small ROM stubs. A stub tail-jumps to the original helper, so it adds no hardware
+stack level, changes no RAM allocation, and adds two instruction cycles per use.
+Only pairs used at least three times qualify. It trades some runtime for ROM:
+
+| Program | Default ROM | `--size` ROM | ROM reduction | Extra cycles |
+| --- | ---: | ---: | ---: | ---: |
+| C TTT | 1,688 | 1,613 | 4.4% | 1.5% |
+| C queens | 1,146 | 1,110 | 3.1% | 3.4% |
+| C hanoi | 979 | 960 | 1.9% | 2.5% |
+| C e | 812 | 801 | 1.4% | 0.9% |
+| C sieve | 616 | 608 | 1.3% | 0.7% |
+
+ROM footprint is the highest occupied byte plus one, including runtime, data
+and placement gaps. Moving code can change short/long conditional-branch
+selection, so cycle differences also include those layout effects. The default
+cleanup changed the measured finite examples by less than 0.1% in cycles.
+Both C profiles are checked against the existing randomized model, recursion,
+console/hardware I/O and 4040 interrupts. The expanded BASIC interpreter uses
+`--size` and has its own tests, including all 192 digits of e. For other C
+programs, `--size` is optional; ordinary builds retain faster direct helper calls.
 
 ### Hardware
 
@@ -325,6 +402,9 @@ between the nibbles of a longer subtraction.
   operator, assignment, branch and loop, and checks their output against a
   Python model of 16-bit C. It also runs programs for functions, recursion,
   arrays, the library and the preprocessor, and the C examples.
+* `tests/basic.py` checks the native interpreter, generated ROM, storage limits,
+  integer arithmetic, array bounds, input, printing, the 192-digit e program,
+  and the full ten-pass sieve plus segment-boundary variants.
 * `tests/asm.py` and `tests/interp.py` compare asm4.py with Intel's MAC4 and
   ntv4004 with Intel's INTERP/4 and INTERP/40 on 300 random programs and the
   examples, requiring identical registers, RAM, port writes and cycle counts.

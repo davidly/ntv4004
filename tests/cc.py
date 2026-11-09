@@ -20,12 +20,16 @@ sys.path.insert(0, str(ROOT))
 import asm4  # noqa: E402
 import cc4  # noqa: E402
 
+SIZE = '--size' in sys.argv
+if SIZE:
+    sys.argv.remove('--size')
+
 NTV = ROOT / ('ntv4004.exe' if os.name == 'nt' else 'ntv4004')
 
 
 def run_c(source, limit=50_000_000, keys=None, options=(), cpu='4004'):
     """Compile and run C source; return its output as text."""
-    text, _ = cc4.compile_source(source, cpu=cpu)
+    text, _ = cc4.compile_source(source, cpu=cpu, size=SIZE)
     memory, _, _ = asm4.Assembler(cpu).assemble(text)
     with tempfile.TemporaryDirectory(prefix='ntv4004 cc ') as directory:
         Path(directory, 'p.hex').write_text(asm4.hex_file(memory), encoding='ascii')
@@ -667,7 +671,7 @@ __interrupt void tick(void)
         }
         for source, (cpu, message) in errors.items():
             with self.subTest(source), self.assertRaises(cc4.CompileError) as caught:
-                cc4.compile_source(source, cpu=cpu)
+                cc4.compile_source(source, cpu=cpu, size=SIZE)
             self.assertIn(message, str(caught.exception))
 
     def test_errors(self):

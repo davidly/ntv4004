@@ -9,7 +9,6 @@
         FIM 6,0
         FIM 0,0
         JMS QSTA
-        JUN MAIN
 MAIN:
 ; MAIN
 ; SHOWING = 1;
@@ -94,7 +93,6 @@ L0002:
 ; RETURN 0;
         FIM 4,0
         FIM 6,0
-        JUN QEXIT
         JUN QEXIT
 HANOI:
 ; HANOI
@@ -237,7 +235,7 @@ L0006:
         JMS QRSTR
         FIM 0,040H
         JUN QRETF
-        ORG 0198H
+        ORG 0194H
 ; PRINT A IN DECIMAL, SIGNED (QPRTD) OR UNSIGNED (QPRTU). QPDIG PRINTS THE
 ; NUMBER OF TIMES B GOES INTO A, AND LEAVES THE REST, UNLESS IT IS A
 ; LEADING ZERO (R2 = 0).
@@ -314,19 +312,22 @@ QPDP:   LDM 1
         LD 3
         WRR
 QPDX:   BBL 0
-        ORG 01F6H
-; A = THE ACCUMULATOR, 0 OR 1.
-QBOOL:  XCH 7
-        LDM 0
+        ORG 01F2H
+; A = A + B.
+QADD:   CLC
+        LD 7
+        ADD 11
+        XCH 7
+        LD 6
+        ADD 10
         XCH 6
-        LDM 0
+        LD 5
+        ADD 9
         XCH 5
-        LDM 0
+        LD 4
+        ADD 8
         XCH 4
         BBL 0
-        ORG 01FEH
-; THE END OF THE PROGRAM: A JUMP TO ITSELF.
-QEXIT:  JUN QEXIT
         ORG 0200H
 ; RETURN FROM A FUNCTION: R0R1 ADDRESSES ITS RETURN NUMBER, AN OFFSET
 ; INTO THE TABLE OF JUMPS THAT FOLLOWS ON THIS PAGE.
@@ -582,22 +583,6 @@ QSTA:   LD 1
         WR3
         BBL 0
         ORG 0337H
-; A = A + B.
-QADD:   CLC
-        LD 7
-        ADD 11
-        XCH 7
-        LD 6
-        ADD 10
-        XCH 6
-        LD 5
-        ADD 9
-        XCH 5
-        LD 4
-        ADD 8
-        XCH 4
-        BBL 0
-        ORG 0345H
 ; B = STATUS CHARACTER 1 OF THE REGISTER AT R0R1, A NIBBLE.
 QLBN1:  LD 1
         DCL
@@ -611,7 +596,7 @@ QLBN1:  LD 1
         LDM 0
         XCH 8
         BBL 0
-        ORG 0351H
+        ORG 0343H
 ; B = STATUS CHARACTER 2 OF THE REGISTER AT R0R1, A NIBBLE.
 QLBN2:  LD 1
         DCL
@@ -625,7 +610,7 @@ QLBN2:  LD 1
         LDM 0
         XCH 8
         BBL 0
-        ORG 035DH
+        ORG 034FH
 ; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
 QLDA:   LD 1
         DCL
@@ -639,7 +624,7 @@ QLDA:   LD 1
         RD3
         XCH 7
         BBL 0
-        ORG 0369H
+        ORG 035BH
 ; A = STATUS CHARACTER 0 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN0:  LD 1
         DCL
@@ -653,7 +638,7 @@ QLDN0:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0375H
+        ORG 0367H
 ; A = STATUS CHARACTER 1 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN1:  LD 1
         DCL
@@ -667,7 +652,7 @@ QLDN1:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0381H
+        ORG 0373H
 ; A = STATUS CHARACTER 2 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN2:  LD 1
         DCL
@@ -681,7 +666,7 @@ QLDN2:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 038DH
+        ORG 037FH
 ; A = STATUS CHARACTER 3 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN3:  LD 1
         DCL
@@ -695,7 +680,7 @@ QLDN3:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0399H
+        ORG 038BH
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 0 AT R0R1; A = THAT NIBBLE.
 QSTN0:  LD 1
         DCL
@@ -709,7 +694,7 @@ QSTN0:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 03A5H
+        ORG 0397H
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 1 AT R0R1; A = THAT NIBBLE.
 QSTN1:  LD 1
         DCL
@@ -723,7 +708,7 @@ QSTN1:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 03B1H
+        ORG 03A3H
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 2 AT R0R1; A = THAT NIBBLE.
 QSTN2:  LD 1
         DCL
@@ -737,7 +722,7 @@ QSTN2:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 03BDH
+        ORG 03AFH
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 3 AT R0R1; A = THAT NIBBLE.
 QSTN3:  LD 1
         DCL
@@ -751,7 +736,17 @@ QSTN3:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 03C9H
+        ORG 03BBH
+; A = THE ACCUMULATOR, 0 OR 1.
+QBOOL:  XCH 7
+        LDM 0
+        XCH 6
+        LDM 0
+        XCH 5
+        LDM 0
+        XCH 4
+        BBL 0
+        ORG 03C3H
 ; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
 QPUTC:  FIM 14,0F0H
         SRC 14
@@ -760,9 +755,12 @@ QPUTC:  FIM 14,0F0H
         LD 7
         WRR
         BBL 0
-        ORG 03D1H
+        ORG 03CBH
 ; INCREMENT THE INT AT R0R1, LEAVING IT IN A.
 QINCV:  JMS QLDA
         JMS QINC
         JUN QSTA
+        ORG 03D1H
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
         END

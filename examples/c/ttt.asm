@@ -14,7 +14,6 @@
         FIM 6,1
         FIM 0,010H
         JMS QSTA
-        JUN MAIN
 MAIN:
 ; MAIN
 ; INT MOVES;
@@ -94,7 +93,6 @@ L0003:
         FIM 4,0
         FIM 6,0
         JUN QEXIT
-        JUN QEXIT
 F0002:
 ; LOOKFORWINNER
 ; INT P;
@@ -172,7 +170,8 @@ L0004:
         CLC
         LD 7
         SUB 0BH
-        JCN 0CH,L0007
+        JCN 4,$+4
+        JUN L0007
         FIM 0,060H
         JMS QLDA
         FIM 0,5
@@ -342,8 +341,6 @@ L0011:
 ; RETURN PIECEBLANK;
         FIM 4,0
         FIM 6,0
-        FIM 0,050H
-        JUN QRETF
         FIM 0,050H
         JUN QRETF
 MINMA:
@@ -532,7 +529,8 @@ L0031:
         CLC
         LD 0BH
         SUB 7
-        JCN 2,L0032
+        JCN 0AH,$+4
+        JUN L0032
 ; ALPHA = VALUE;
         FIM 0,0B0H
         JMS QLDA
@@ -612,8 +610,6 @@ L0024:
         JMS QLDA
         FIM 0,070H
         JUN QRETF
-        FIM 0,070H
-        JUN QRETF
 FINDS:
 ; FINDSOLUTION
 ; INT I;
@@ -689,30 +685,37 @@ L0044:
         JMS QLDA
         FIM 0,0C0H
         JUN QRETF
-        FIM 0,0C0H
-        JUN QRETF
-        ORG 03E7H
-; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
-QCLR:   LDM 0
-        XCH 12
-QCLB:   LD 12
-        DCL
-        FIM 0,00H
-QCLC:   SRC 0
-        LDM 0
-        WRM
-        ISZ 1,QCLC
-        WR0
-        WR1
-        WR2
-        WR3
-        ISZ 0,QCLC
-        INC 12
-        ISZ 13,QCLB
+        ORG 03DBH
+; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
+QTST:   LD 4
+        JCN 0CH,QTT
+        LD 5
+        JCN 0CH,QTT
+        LD 6
+        JCN 0CH,QTT
+        LD 7
+        JCN 0CH,QTT
         BBL 0
-        ORG 03FCH
-; THE END OF THE PROGRAM: A JUMP TO ITSELF.
-QEXIT:  JUN QEXIT
+QTT:    BBL 1
+QNOTZ:  LD 4
+        JCN 0CH,QZF
+        LD 5
+        JCN 0CH,QZF
+        LD 6
+        JCN 0CH,QZF
+        LD 7
+        JCN 0CH,QZF
+        BBL 1
+QZF:    BBL 0
+        ORG 03F7H
+; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
+QPUTC:  FIM 14,0F0H
+        SRC 14
+        LD 6
+        WRR
+        LD 7
+        WRR
+        BBL 0
         ORG 0400H
 ; RETURN FROM A FUNCTION: R0R1 ADDRESSES ITS RETURN NUMBER, AN OFFSET
 ; INTO THE TABLE OF JUMPS THAT FOLLOWS ON THIS PAGE.
@@ -1058,28 +1061,25 @@ QNE:    CLC
         BBL 0
 QNT:    BBL 1
         ORG 05A3H
-; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
-QTST:   LD 4
-        JCN 0CH,QTT
-        LD 5
-        JCN 0CH,QTT
-        LD 6
-        JCN 0CH,QTT
-        LD 7
-        JCN 0CH,QTT
+; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
+QCLR:   LDM 0
+        XCH 12
+QCLB:   LD 12
+        DCL
+        FIM 0,00H
+QCLC:   SRC 0
+        LDM 0
+        WRM
+        ISZ 1,QCLC
+        WR0
+        WR1
+        WR2
+        WR3
+        ISZ 0,QCLC
+        INC 12
+        ISZ 13,QCLB
         BBL 0
-QTT:    BBL 1
-QNOTZ:  LD 4
-        JCN 0CH,QZF
-        LD 5
-        JCN 0CH,QZF
-        LD 6
-        JCN 0CH,QZF
-        LD 7
-        JCN 0CH,QZF
-        BBL 1
-QZF:    BBL 0
-        ORG 05BFH
+        ORG 05B8H
 ; A = -A, OR A = A + 1.
 QNEG:   LD 4
         CMA
@@ -1098,7 +1098,7 @@ QINC:   ISZ 7,QINCX
         ISZ 5,QINCX
         INC 4
 QINCX:  BBL 0
-        ORG 05D3H
+        ORG 05CCH
 ; A = THE __NIBBLE AT MAIN-MEMORY ADDRESS A.
 QLDIN:  LD 5
         DCL
@@ -1116,7 +1116,7 @@ QLDIN:  LD 5
         LDM 0
         XCH 4
         BBL 0
-        ORG 05E3H
+        ORG 05DCH
 ; STORE A, OR ITS LOW BYTE, IN THE STATUS REGISTER AT R0R1.
 QSTAC:  LDM 0
         XCH 4
@@ -1134,22 +1134,7 @@ QSTA:   LD 1
         LD 7
         WR3
         BBL 0
-        ORG 05F3H
-; EXCHANGE A AND B.
-QXAB:   LD 4
-        XCH 8
-        XCH 4
-        LD 5
-        XCH 9
-        XCH 5
-        LD 6
-        XCH 10
-        XCH 6
-        LD 7
-        XCH 11
-        XCH 7
-        BBL 0
-        ORG 0600H
+        ORG 05ECH
 ; A = A + B.
 QADD:   CLC
         LD 7
@@ -1165,7 +1150,27 @@ QADD:   CLC
         ADD 8
         XCH 4
         BBL 0
-        ORG 060EH
+        ORG 05FAH
+; INCREMENT THE INT AT R0R1, LEAVING IT IN A.
+QINCV:  JMS QLDA
+        JMS QINC
+        JUN QSTA
+        ORG 0600H
+; EXCHANGE A AND B.
+QXAB:   LD 4
+        XCH 8
+        XCH 4
+        LD 5
+        XCH 9
+        XCH 5
+        LD 6
+        XCH 10
+        XCH 6
+        LD 7
+        XCH 11
+        XCH 7
+        BBL 0
+        ORG 060DH
 ; B = STATUS CHARACTER 0 OF THE REGISTER AT R0R1, A NIBBLE.
 QLBN0:  LD 1
         DCL
@@ -1179,7 +1184,7 @@ QLBN0:  LD 1
         LDM 0
         XCH 8
         BBL 0
-        ORG 061AH
+        ORG 0619H
 ; B = STATUS CHARACTER 1 OF THE REGISTER AT R0R1, A NIBBLE.
 QLBN1:  LD 1
         DCL
@@ -1193,7 +1198,7 @@ QLBN1:  LD 1
         LDM 0
         XCH 8
         BBL 0
-        ORG 0626H
+        ORG 0625H
 ; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
 QLDA:   LD 1
         DCL
@@ -1207,7 +1212,7 @@ QLDA:   LD 1
         RD3
         XCH 7
         BBL 0
-        ORG 0632H
+        ORG 0631H
 ; B = THE STATUS REGISTER AT R0R1.
 QLDB:   LD 1
         DCL
@@ -1221,7 +1226,7 @@ QLDB:   LD 1
         RD3
         XCH 11
         BBL 0
-        ORG 063EH
+        ORG 063DH
 ; A = STATUS CHARACTER 0 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN0:  LD 1
         DCL
@@ -1235,7 +1240,7 @@ QLDN0:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 064AH
+        ORG 0649H
 ; A = STATUS CHARACTER 1 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN1:  LD 1
         DCL
@@ -1249,7 +1254,7 @@ QLDN1:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0656H
+        ORG 0655H
 ; A = STATUS CHARACTER 2 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN2:  LD 1
         DCL
@@ -1263,7 +1268,7 @@ QLDN2:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0662H
+        ORG 0661H
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 0 AT R0R1; A = THAT NIBBLE.
 QSTN0:  LD 1
         DCL
@@ -1277,7 +1282,7 @@ QSTN0:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 066EH
+        ORG 066DH
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 1 AT R0R1; A = THAT NIBBLE.
 QSTN1:  LD 1
         DCL
@@ -1291,7 +1296,7 @@ QSTN1:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 067AH
+        ORG 0679H
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 2 AT R0R1; A = THAT NIBBLE.
 QSTN2:  LD 1
         DCL
@@ -1305,7 +1310,7 @@ QSTN2:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0686H
+        ORG 0685H
 ; B = THE __NIBBLE AT MAIN-MEMORY CHARACTER R0R1 OF BANK ACC.
 QLBIN:  DCL
         SRC 0
@@ -1318,25 +1323,14 @@ QLBIN:  DCL
         LDM 0
         XCH 8
         BBL 0
-        ORG 0691H
-; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
-QPUTC:  FIM 14,0F0H
-        SRC 14
-        LD 6
-        WRR
-        LD 7
-        WRR
-        BBL 0
-        ORG 0699H
-; INCREMENT THE INT AT R0R1, LEAVING IT IN A.
-QINCV:  JMS QLDA
-        JMS QINC
-        JUN QSTA
-        ORG 069FH
+        ORG 0690H
 ; THE LOW BIT OF A, IN THE ACCUMULATOR.
 QODD:   LD 7
         RAR
         JCN 2,QOD1
         BBL 0
 QOD1:   BBL 1
+        ORG 0696H
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
         END

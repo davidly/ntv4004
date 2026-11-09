@@ -2265,9 +2265,10 @@ STATUS_REGISTERS = 128
 
 
 class Compiler:
-    def __init__(self, source, name='program', cpu='4004'):
+    def __init__(self, source, name='program', cpu='4004', size=False):
         self.source_lines = source.splitlines()
         self.name, self.cpu = name, cpu
+        self.size = size
         tokens = Preprocessor().run(source)
         self.globals, self.functions = Parser(tokens).program()
         if 'main' not in self.functions:
@@ -2276,6 +2277,7 @@ class Compiler:
         self.used = set()
         self.strings = {}  # data -> (label, block number)
         self.string_blocks = []  # [free bytes, [(label, data)]]
+        self.shared_accesses = []
         self.return_sites = []
         self.loops = []
         self.code = []
@@ -2301,6 +2303,9 @@ class Compiler:
         self.code, self.a_holds, self.incoming, self.falls = [], None, {}, True
         self.startup()
         self.code += body
+        self.code = self.shrink_code(self.code)
+        if self.size:
+            self.code = self.share_accesses(self.code)
         return self.output()
 
     # analysis and allocation
@@ -2499,7 +2504,11 @@ class Compiler:
     def startup(self):
         if self.handler:  # an interrupt starts at 003H
             self.op('JUN', 'QSTRT')
+            # Fixed-address padding and the hardware vector are roots even
+            # without C control-flow predecessors. Keep both during cleanup.
+            self.place('QIPAD')
             self.op('NOP')
+            self.place('QIVEC')
             self.op('JUN', 'QINT')
             self.place('QSTRT')
         banks = max((self.slots_used - 1) // 16, (max(self.memory_top, 1) - 1) // 256) + 1
@@ -3408,6 +3417,78 @@ class Compiler:
 
     # layout and output
 
+    def share_accesses(self, items):
+        """Outline repeated FIM 0 / JMS helper pairs with a tail jump.
+
+        The stub's JUN does not push another hardware return address. Each
+        selected pair saves two bytes per use at a cost of two cycles.
+        """
+        def key(i):
+            first = items[i]
+            if i+1 >= len(items) or first[:2] != ('op', 'FIM') or first[2][0] != 0:
+                return None
+            second = items[i+1]
+            if second[:2] != ('op', 'JMS') or second[2][0] not in RUNTIME:
+                return None
+            operand = first[2][1]
+            value = operand.address() if isinstance(operand, Slot) else operand
+            return (value, second[2][0]) if isinstance(value, int) else None
+        counts = {}
+        for i in range(len(items)):
+            pair = key(i)
+            if pair is not None: counts[pair] = counts.get(pair, 0)+1
+        shared = {}
+        for pair, count in counts.items():
+            if count >= 3:
+                label = f'W{len(shared)+1:04d}'
+                shared[pair] = label
+                value, helper = pair
+                self.shared_accesses.append(f'{label}: FIM 0,{number(value)}\n        JUN {helper}')
+        output = [];i = 0
+        while i < len(items):
+            pair = key(i)
+            if pair in shared:
+                output.append(('op', 'JMS', (shared[pair],)))
+                i += 2
+            else:
+                output.append(items[i]);i += 1
+        return output
+
+    @staticmethod
+    def shrink_code(items):
+        """Remove unreachable instructions and transfers to immediate fallthrough.
+
+        Labels remain entry points: software-call continuations are reached
+        indirectly through the runtime return table, not a visible C jump.
+        """
+        while True:
+            result = []
+            reachable = True
+            for item in items:
+                if item[0] == 'label':
+                    reachable = True
+                if item[0] != 'comment' and not reachable:
+                    continue
+                result.append(item)
+                if item[0] == 'op' and item[1] == 'JUN':
+                    reachable = False
+            output = []
+            for i, item in enumerate(result):
+                target = (item[2][0] if item[:2] == ('op', 'JUN') else
+                          item[2] if item[0] == 'jcn' else None)
+                if target is not None:
+                    j = i + 1
+                    while j < len(result) and result[j][0] in ('label', 'comment'):
+                        if result[j] == ('label', target):
+                            break
+                        j += 1
+                    if j < len(result) and result[j] == ('label', target):
+                        continue
+                output.append(item)
+            if output == items:
+                return output
+            items = output
+
     def layout(self, items):
         """Place compiled code from 0, choosing a short or long form for each JCN."""
         long = set()
@@ -3493,6 +3574,7 @@ class Compiler:
                     chunk = (data + b'\0')[i:i + 12]
                     text += '\n        DB ' + ','.join(number(b) for b in chunk)
             blocks.append((text, False))
+        blocks += [(text, False) for text in self.shared_accesses]
         placed, lines = [], []
         blocks.sort(key=lambda b: (not b[1], -block_size(b[0])))
         for text, align in blocks:
@@ -3553,9 +3635,9 @@ QINTR:
         BBS'''
 
 
-def compile_source(source, name='program', cpu='4004'):
+def compile_source(source, name='program', cpu='4004', size=False):
     """Return (assembly text, compiler) for C source."""
-    compiler = Compiler(source, name, cpu)
+    compiler = Compiler(source, name, cpu, size=size)
     return compiler.compile(), compiler
 
 
@@ -3566,10 +3648,11 @@ def main():
     parser.add_argument('-S', dest='assembly_only', action='store_true', help='write only the MAC4 source')
     parser.add_argument('--4040', dest='cpu', action='store_const', const='4040', default='4004',
                         help='compile for the 4040: interrupts, __ei, __di and __halt')
+    parser.add_argument('--size', action='store_true', help='share repeated runtime access sequences to reduce ROM at a small cycle cost')
     parser.add_argument('--stats', action='store_true', help='report ROM and RAM use')
     args = parser.parse_args()
     try:
-        text, compiler = compile_source(args.source.read_text(encoding='utf-8'), args.source.stem, args.cpu)
+        text, compiler = compile_source(args.source.read_text(encoding='utf-8'), args.source.stem, args.cpu, size=args.size)
         destination = args.output or args.source.with_suffix('.hex')
         destination.with_suffix('.asm').write_text(text, encoding='ascii', newline='\n')
         if not args.assembly_only:
