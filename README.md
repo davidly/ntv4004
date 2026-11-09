@@ -130,6 +130,10 @@ C without pointers, structures or floating point:
 
 * `int` and `unsigned` are 16 bits and `char` is 8 bits, unsigned. Arrays are
   one-dimensional; `_Bool` arrays are packed four flags to a RAM character.
+* `__nibble` is a 4-bit unsigned type, the 4004's own size: a nibble array
+  takes one RAM character per element, and nibble variables are packed four
+  to a status register. `__CC4__` is predefined, so a program can use
+  `__nibble` only under this compiler.
 * Functions take parameters and return values, and may be recursive.
 * Every C statement except `switch` and `goto`, and every operator except
   the pointer, member and `sizeof` operators.
@@ -142,14 +146,15 @@ The output is ordinary MAC4 source with the C lines as comments; Intel's
 MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
 
 * Scalars live in the 4002 status characters, one 4-character register
-  each, so a variable's address is one byte: register and bank. Arrays live
-  in main memory. That gives 127 scalars (one register holds the stack
-  pointer) and 2,048 characters for arrays.
+  each, or one character each for `__nibble`s, so a variable's address is
+  one byte: register and bank. Arrays live in main memory. That gives 127
+  registers for scalars (one holds the stack pointer) and 2,048 characters
+  for arrays.
 * Arithmetic is done in R4–R7 and R8–R11 by a runtime library of small
   routines, included only when used. The compiled code keeps track of which
   variable R4–R7 holds, to skip reloading it.
 * Values known to fit in 0 to 255 are compared in 8 bits, inline, without
-  calling the library. Besides `char`s, constants and comparisons, these
+  calling the library, and values that fit in 0 to 15 in 4 bits. Besides `char`s, constants and comparisons, these
   include the `int` and `unsigned` variables, parameters and functions that
   are only ever given such values, which the compiler finds by elimination.
 * The hardware stack has only three levels, so it is left to the runtime
@@ -165,21 +170,22 @@ MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
   used.
 
 The C benchmarks are the cpm_compilers sources. sieve's flags are a `_Bool`
-array, since 8,191 `char`s would need eight times the 4002s' memory, and
-ttt's `main` takes no arguments:
+array, since 8,191 `char`s would need eight times the 4002s' memory. ttt's
+`main` takes no arguments, and its `ttype` is `__nibble` under this compiler
+and `char` elsewhere:
 
 | Program | Code + library | Instruction cycles | 740 kHz 4004 | Hand-written assembly |
 | --- | ---: | ---: | ---: | ---: |
 | [hello](examples/c/hello.c) | 94 bytes | 1,775 | 0.02 s | |
 | [e](examples/c/e.c) | 818 bytes | 29,482,646 | 319 s | 2.9 times as long |
 | [sieve](examples/c/sieve.c) | 622 bytes | 55,126,050 | 596 s | 7.7 times |
-| [ttt](examples/c/ttt.c) | 1,732 bytes | 14,602,719 | 158 s | 12.3 times |
+| [ttt](examples/c/ttt.c) | 1,701 bytes | 11,951,902 | 129 s | 10.1 times |
 
 e comes closest because most of its time goes to division, which the library
 does much as the hand-written code does. ttt falls furthest behind: each
-recursive call saves and restores eight status registers, which the
-hand-written version avoids by keeping each depth's frame in its own RAM
-register.
+recursive call saves and restores five status registers (eight with `char`
+instead of `__nibble`), which the hand-written version avoids by keeping
+each depth's frame in its own RAM register.
 
 ## Examples
 

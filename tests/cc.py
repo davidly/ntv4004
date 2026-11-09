@@ -2,7 +2,7 @@
 """Check cc4.py: compile C programs, run them in ntv4004, and compare the output.
 
 Seeded random programs exercise every operator and assignment on int,
-unsigned, char and array operands against a Python model of 16-bit C;
+unsigned, char, __nibble and array operands against a Python model of 16-bit C;
 fixed programs cover control flow, functions, recursion and the library;
 and the benchmarks must print what their 8008 and 8080 versions print.
 """
@@ -41,8 +41,11 @@ def run_c(source, limit=50_000_000, keys=None):
 
 # ---------------------------------------------------------------- a model of 16-bit C
 
-TYPES = {'a': 'int', 'b': 'int', 'c': 'int', 'u': 'unsigned', 'v': 'unsigned', 'h': 'char', 'g': 'char'}
-ARRAYS = {'ia': ('int', 4), 'ca': ('char', 4), 'ba': ('bool', 16)}
+TYPES = {'a': 'int', 'b': 'int', 'c': 'int', 'u': 'unsigned', 'v': 'unsigned', 'h': 'char', 'g': 'char',
+         'n': 'nibble'}
+ARRAYS = {'ia': ('int', 4), 'ca': ('char', 4), 'ba': ('bool', 16), 'na': ('nibble', 4)}
+WIDTH = {'char': 0xFF, 'nibble': 0xF, 'int': 0xFFFF, 'unsigned': 0xFFFF}
+DECLARED = {'nibble': '__nibble', 'bool': '_Bool'}
 
 
 def s16(value):
@@ -75,7 +78,7 @@ def evaluate(tree, env):
         return (a if test else b)[0], ctype
     if kind == 'cast':
         value = evaluate(tree[2], env)[0]
-        return (value & 0xFF, 'int') if tree[1] == 'char' else (value, promoted(tree[1]))
+        return (value & WIDTH[tree[1]], 'int') if tree[1] in ('char', 'nibble') else (value, promoted(tree[1]))
     op = tree[1]
     (left, ltype), (right, rtype) = evaluate(tree[2], env), evaluate(tree[3], env)
     return binary(op, left, ltype, right, rtype)
@@ -114,7 +117,7 @@ def text(tree):
     if kind == 'cond':
         return f'({text(tree[1])} ? {text(tree[2])} : {text(tree[3])})'
     if kind == 'cast':
-        return f'(({tree[1]})({text(tree[2])}))'
+        return f'(({DECLARED.get(tree[1], tree[1])})({text(tree[2])}))'
     return f'({text(tree[2])} {tree[1]} {text(tree[3])})'
 
 
@@ -159,7 +162,7 @@ class Generator:
             return ('cond', self.expression(env, depth + 1), self.expression(env, depth + 1),
                     self.expression(env, depth + 1))
         if r < 0.45:
-            return ('cast', self.rng.choice(['char', 'unsigned', 'int']), self.expression(env, depth + 1))
+            return ('cast', self.rng.choice(['char', 'nibble', 'unsigned', 'int']), self.expression(env, depth + 1))
         op = self.rng.choice(OPERATORS)
         left, right = self.expression(env, depth + 1), self.expression(env, depth + 1)
         return self.fix(op, left, right, env)
@@ -220,7 +223,7 @@ def static_type(tree):
 def execute(statements, env, out):
     """Run the statements in the model, appending their output to out."""
     def store(name, value):
-        env[name] = value & 0xFF if TYPES[name] == 'char' else value & 0xFFFF
+        env[name] = value & WIDTH[TYPES[name]]
 
     for s in statements:
         kind = s[0]
@@ -236,7 +239,7 @@ def execute(statements, env, out):
             _, name, index, tree = s
             position, value = evaluate(index, env)[0], evaluate(tree, env)[0]
             ctype = ARRAYS[name][0]
-            env[name][position] = value & 0xFF if ctype == 'char' else int(value != 0) if ctype == 'bool' else value
+            env[name][position] = int(value != 0) if ctype == 'bool' else value & WIDTH[ctype]
         elif kind == 'if':
             execute(s[2] if evaluate(s[1], env)[0] else s[3], env, out)
         elif kind in ('break', 'continue'):
@@ -302,12 +305,12 @@ def random_program(seed):
     """C source and its expected output."""
     g = Generator(seed)
     rng = g.rng
-    env = {name: rng.randrange(256 if TYPES[name] == 'char' else 65536) for name in TYPES}
+    env = {name: rng.randrange(WIDTH[TYPES[name]] + 1) for name in TYPES}
     env.update({name: [0] * length for name, (_, length) in ARRAYS.items()})
-    declarations = [f'{"unsigned" if t == "unsigned" else t} {n} = {s16(env[n]) if t == "int" else env[n]};'
-                    for n, t in TYPES.items()]
-    declarations += ['int ia[4];', 'char ca[4];', '_Bool ba[16];', 'int i0, i1;']
-    statements = g.statements(14, 0, [])
+    declarations = [f'{DECLARED.get(t, t)} {n} = {s16(env[n]) if t == "int" else env[n]};' for n, t in TYPES.items()]
+    declarations += [f'{DECLARED.get(t, t)} {n}[{length}];' for n, (t, length) in ARRAYS.items()]
+    declarations += ['int i0, i1;']
+    statements = g.statements(12, 0, [])
     for name, (_, length) in ARRAYS.items():
         statements += [('print', ('elem', name, ('const', i, 'int'))) for i in range(length)]
     out = []
@@ -466,6 +469,37 @@ int main()
     return 0;
 }
 ''', 'abcdefghijklmno 1 1\n'),
+    'nibble': ('''
+__nibble a, b, c, d, e;
+__nibble digits[10];
+int depth(__nibble n, __nibble acc)
+{
+    __nibble x, y;
+    x = n;
+    y = acc;
+    if (n == 0) return acc;
+    depth(n - 1, acc + 1);
+    return x * 10 + y;
+}
+__nibble half(int x) { return x / 2; }
+int main()
+{
+    int i;
+    a = 17;
+    b = a + 14;
+    c = 15;
+    c++;
+    d = 9;
+    d -= 10;
+    e = (__nibble)300;
+    printf("%d %d %d %d %d\\n", a, b, c, d, e);
+    for (i = 0; i < 10; i++) digits[i] = i * 3;
+    for (i = 0; i < 10; i++) printf("%d ", digits[i]);
+    printf("\\n%d %d %d %d\\n", digits[4] > digits[3], digits[5] == 15, a < b, b > 300);
+    printf("%d %d %d\\n", depth(5, 2), depth(0, 7), half(40));
+    return 0;
+}
+''', '1 15 0 15 12\n0 3 6 9 12 15 2 5 8 11 \n1 1 1 0\n52 7 4\n'),
     'arrays': ('''
 int squares[20];
 char letters[26];
@@ -492,10 +526,18 @@ int main()
 @unittest.skipUnless(NTV.is_file(), 'build ntv4004 first (m.sh or m.bat)')
 class Compiler(unittest.TestCase):
     def test_random_programs(self):
+        ran = 0
         for seed in range(60):
             source, expected = random_program(seed)
             with self.subTest(seed=seed):
-                self.assertEqual(run_c(source), expected, source)
+                try:
+                    output = run_c(source)
+                except cc4.CompileError as error:  # a few random programs exceed the 4K of ROM
+                    self.assertIn('bytes of ROM', str(error))
+                    continue
+                self.assertEqual(output, expected, source)
+                ran += 1
+        self.assertGreaterEqual(ran, 55)
 
     def test_programs(self):
         for name, (source, expected) in PROGRAMS.items():

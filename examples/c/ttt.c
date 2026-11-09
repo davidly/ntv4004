@@ -1,5 +1,6 @@
 /*
-   For the 4004, main takes no arguments and the default is one iteration.
+   For the 4004, main takes no arguments, the default is one iteration, and
+   cc4.py's ttype is its 4-bit __nibble.
 
    This version builds with old compilers including:
        Aztec C 1.06 for 8080 & Z80 on CP/M.
@@ -35,7 +36,11 @@
 #define PieceO 2
 #define PieceBlank 0
 
+#ifdef __CC4__
+#define ttype __nibble   /* cc4.py's 4-bit type, four to a 4002 status register */
+#else
 #define ttype char
+#endif
 
 int g_Iterations = DefaultIterations;
 int g_IMoves;

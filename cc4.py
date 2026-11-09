@@ -9,10 +9,12 @@ The output is MAC4 source, assembled here with asm4.py; Intel's MAC4 accepts
 it too. The language is C without pointers, structures or floating point:
 
 * int (16 bits), unsigned (16 bits), char (8 bits, unsigned) and void.
-  _Bool arrays are packed four flags to a 4002 RAM character.
+  _Bool arrays are packed four flags to a 4002 RAM character. __nibble is a
+  4-bit unsigned type for the 4004.
 * Global and local scalars and one-dimensional arrays. Scalars live in the
-  4002 status characters, one register (4 nibbles) each; arrays live in main
-  memory. Global initializers must be constant.
+  4002 status characters, one register (4 nibbles) each, or four __nibbles
+  to a register; arrays live in main memory. Global initializers must be
+  constant.
 * Functions with parameters and return values, including recursion. The
   4004's three-level stack is left to the runtime library: calls jump, and
   return through a table indexed by a return number stored with the callee.
@@ -23,7 +25,7 @@ it too. The language is C without pointers, structures or floating point:
 * putchar, getchar, puts, and printf with a constant format and %d %u %x %c
   %s (a string constant) and %%.
 * #include (ignored), #define with or without parameters, #undef, #if,
-  #ifdef, #ifndef, #elif, #else and #endif.
+  #ifdef, #ifndef, #elif, #else and #endif. __CC4__ is predefined.
 """
 import argparse
 from pathlib import Path
@@ -148,7 +150,7 @@ def strip_comments(text):
 
 class Preprocessor:
     def __init__(self):
-        self.macros = {}  # name -> (parameters or None, body tokens)
+        self.macros = {'__CC4__': (None, [Token('num', (1, 'int'), 0)])}  # name -> (parameters or None, body tokens)
 
     def run(self, text):
         tokens, stack = [], []  # stack entries: [this branch taken, some branch taken]
@@ -289,7 +291,7 @@ class Function:
         self.label = self.ret_slot = None
 
 
-SPECIFIERS = {'int', 'char', 'unsigned', 'signed', 'short', 'long', 'void', '_Bool', 'static', 'extern',
+SPECIFIERS = {'__nibble', 'int', 'char', 'unsigned', 'signed', 'short', 'long', 'void', '_Bool', 'static', 'extern',
               'register', 'auto', 'const', 'volatile', 'float', 'double', 'struct', 'union', 'enum', 'typedef'}
 BINARY = {'||': 1, '&&': 2, '|': 3, '^': 4, '&': 5, '==': 6, '!=': 6, '<': 7, '>': 7, '<=': 7, '>=': 7,
           '<<': 8, '>>': 8, '+': 9, '-': 9, '*': 10, '/': 10, '%': 10}
@@ -351,6 +353,8 @@ class Parser:
             raise CompileError(f'line {line}: long is not supported; int is 16 bits')
         if 'void' in words:
             return 'void'
+        if '__nibble' in words:
+            return 'nibble'
         if '_Bool' in words:
             return 'bool'
         if 'char' in words:
@@ -758,7 +762,7 @@ def fold(e):
         x = fold(e.x)
         if x is None:
             return None
-        return x & 0xFF if e.ctype == 'char' else int(x != 0) if e.ctype == 'bool' else x
+        return {'char': x & 0xFF, 'nibble': x & 15, 'bool': int(x != 0)}.get(e.ctype, x)
     if kind == 'cond':
         c = fold(e.c)
         if c is None:
@@ -826,6 +830,22 @@ def expressions(s):
         if st.kind == 'decl':
             for _, init in st.items:
                 yield from walk(init)
+
+
+def pack(variables, owner):
+    """Give each variable a status register, four nibbles to one; return [(slot, variables)]."""
+    out, open_slot = [], None
+    for v in variables:
+        if v.ctype == 'nibble':
+            if open_slot is None or len(open_slot[1]) == 4:
+                open_slot = (Slot(f'{owner} {v.name}'), [])
+                out.append(open_slot)
+            v.slot, v.nib = open_slot[0], len(open_slot[1])
+            open_slot[1].append(v)
+        else:
+            v.slot, v.nib = Slot(f'{owner} {v.name}'), None
+            out.append((v.slot, [v]))
+    return out
 
 
 def references(e):
@@ -1009,6 +1029,101 @@ QLDBC:  DCL
         XCH 8
         LDM 0
         XCH 9
+        BBL 0''')
+# A __NIBBLE SCALAR IS STATUS CHARACTER K OF THE REGISTER AT R0R1.
+for k in range(4):
+    runtime(f'QLDN{k}', f'''
+; A = STATUS CHARACTER {k} OF THE REGISTER AT R0R1, A NIBBLE.
+QLDN{k}:  LD 1
+        DCL
+        SRC 0
+        RD{k}
+        XCH 7
+        LDM 0
+        XCH 6
+        LDM 0
+        XCH 5
+        LDM 0
+        XCH 4
+        BBL 0''')
+    runtime(f'QLBN{k}', f'''
+; B = STATUS CHARACTER {k} OF THE REGISTER AT R0R1, A NIBBLE.
+QLBN{k}:  LD 1
+        DCL
+        SRC 0
+        RD{k}
+        XCH 11
+        LDM 0
+        XCH 10
+        LDM 0
+        XCH 9
+        LDM 0
+        XCH 8
+        BBL 0''')
+    runtime(f'QSTN{k}', f'''
+; STORE A'S LOW NIBBLE IN STATUS CHARACTER {k} AT R0R1; A = THAT NIBBLE.
+QSTN{k}:  LD 1
+        DCL
+        SRC 0
+        LD 7
+        WR{k}
+        LDM 0
+        XCH 6
+        LDM 0
+        XCH 5
+        LDM 0
+        XCH 4
+        BBL 0''')
+runtime('QLDIN', '''
+; A = THE __NIBBLE AT MAIN-MEMORY ADDRESS A.
+QLDIN:  LD 5
+        DCL
+        LD 6
+        XCH 0
+        LD 7
+        XCH 1
+        SRC 0
+        RDM
+        XCH 7
+        LDM 0
+        XCH 6
+        LDM 0
+        XCH 5
+        LDM 0
+        XCH 4
+        BBL 0''')
+runtime('QSTIN', '''
+; STORE B'S LOW NIBBLE AT MAIN-MEMORY ADDRESS A; A = THAT NIBBLE.
+QSTIN:  LD 5
+        DCL
+        LD 6
+        XCH 0
+        LD 7
+        XCH 1
+        SRC 0
+        LD 11
+        WRM
+        LD 11
+        XCH 7
+        LDM 0
+        XCH 6
+        LDM 0
+        XCH 5
+        LDM 0
+        XCH 4
+        BBL 0''')
+runtime('QLBIN', '''
+; B = THE __NIBBLE AT MAIN-MEMORY CHARACTER R0R1 OF BANK ACC.
+QLBIN:  DCL
+        SRC 0
+        RDM
+        XCH 11
+        LDM 0
+        XCH 10
+        LDM 0
+        XCH 9
+        LDM 0
+        XCH 8
         BBL 0''')
 runtime('QSTIC QSTI QMOVB', '''
 ; STORE B, OR ITS LOW BYTE, AT MAIN-MEMORY ADDRESS A; THEN A = B.
@@ -2111,9 +2226,9 @@ def number(value):
     return str(value) if value < 10 else f'0{value:X}H'
 
 
-SIZES = {'int': 4, 'unsigned': 4, 'char': 2}
-LOAD = {'int': 'QLDI', 'unsigned': 'QLDI', 'char': 'QLDIC'}
-STORE = {'int': 'QSTI', 'unsigned': 'QSTI', 'char': 'QSTIC', 'bool': 'QSBIT'}
+SIZES = {'int': 4, 'unsigned': 4, 'char': 2, 'nibble': 1}
+LOAD = {'int': 'QLDI', 'unsigned': 'QLDI', 'char': 'QLDIC', 'nibble': 'QLDIN'}
+STORE = {'int': 'QSTI', 'unsigned': 'QSTI', 'char': 'QSTIC', 'bool': 'QSBIT', 'nibble': 'QSTIN'}
 SIGNED_COMPARE = {'<': 'QSLT', '<=': 'QSLE', '>': 'QSGT', '>=': 'QSGE', '==': 'QEQ', '!=': 'QNE'}
 UNSIGNED_COMPARE = {'<': 'QULT', '<=': 'QULE', '>': 'QUGT', '>=': 'QUGE', '==': 'QEQ', '!=': 'QNE'}
 ARITHMETIC = {'+': 'QADD', '-': 'QSUB', '*': 'QMUL', '&': 'QAND', '|': 'QOR', '^': 'QXOR', '<<': 'QSHL'}
@@ -2206,70 +2321,78 @@ class Compiler:
             f.label = label
 
     def infer_narrow(self):
-        """Find the int and unsigned variables and functions whose values always fit in
-        0 to 255: assume all do, then drop any written with a wider value, by a compound
+        """Find the variables and functions whose values always fit in 8 bits, and in
+        4: assume all do, then drop any written with a wider value, by a compound
         assignment, ++ or --, until nothing changes."""
-        self.narrow_vars = {v for v in self.globals.values() if v.length is None and v.ctype != 'char'
-                            and (v.init is None or fold(v.init) < 256)}
-        for f in self.reachable:
-            self.narrow_vars |= {v for v in f.params + f.locals if v.length is None and v.ctype != 'char'}
-        self.narrow_functions = {f.name for f in self.reachable if f.ctype in ('int', 'unsigned')}
-        changed = True
-        while changed:
-            before = (len(self.narrow_vars), len(self.narrow_functions))
+        self.narrow_vars, self.narrow_functions = {}, {}
+        for bits in (8, 4):
+            vars_ = {v for v in self.globals.values() if v.length is None
+                     and (v.init is None or fold(v.init) < 1 << bits)}
             for f in self.reachable:
-                for s in statements(f.body):
-                    if s.kind == 'decl':
-                        for var, init in s.items:
-                            if init is not None and not self.narrow(init):
-                                self.narrow_vars.discard(var)
-                    elif s.kind == 'return' and (s.e is None or not self.narrow(s.e)):
-                        self.narrow_functions.discard(f.name)
-                for e in expressions(f.body):
-                    if e.kind in ('assign', 'incdec') and e.target.kind == 'var':
-                        if e.kind == 'incdec' or e.op != '=' or not self.narrow(e.value):
-                            self.narrow_vars.discard(e.target.var)
-                    elif e.kind == 'call' and e.name not in BUILTINS:
-                        for arg, param in zip(e.args, self.functions[e.name].params):
-                            if not self.narrow(arg):
-                                self.narrow_vars.discard(param)
-            changed = before != (len(self.narrow_vars), len(self.narrow_functions))
+                vars_ |= {v for v in f.params + f.locals if v.length is None}
+            self.narrow_vars[bits] = vars_
+            self.narrow_functions[bits] = {f.name for f in self.reachable if f.ctype != 'void'}
+            changed = True
+            while changed:
+                before = (len(vars_), len(self.narrow_functions[bits]))
+                for f in self.reachable:
+                    for s in statements(f.body):
+                        if s.kind == 'decl':
+                            for var, init in s.items:
+                                if init is not None and not self.narrow(init, bits):
+                                    vars_.discard(var)
+                        elif s.kind == 'return' and (s.e is None or not self.narrow(s.e, bits)):
+                            self.narrow_functions[bits].discard(f.name)
+                    for e in expressions(f.body):
+                        if e.kind in ('assign', 'incdec') and e.target.kind == 'var':
+                            if e.kind == 'incdec' or e.op != '=' or not self.narrow(e.value, bits):
+                                vars_.discard(e.target.var)
+                        elif e.kind == 'call' and e.name not in BUILTINS:
+                            for arg, param in zip(e.args, self.functions[e.name].params):
+                                if not self.narrow(arg, bits):
+                                    vars_.discard(param)
+                changed = before != (len(vars_), len(self.narrow_functions[bits]))
 
-    def narrow(self, e):
-        """Whether e's value is always 0 to 255, so it can be compared in 8 bits."""
+    @staticmethod
+    def fits(ctype, bits):
+        return ctype in ('nibble', 'bool') or ctype == 'char' and bits >= 8
+
+    def narrow(self, e, bits=8):
+        """Whether e's value always fits in the given number of bits, unsigned."""
         k = fold(e)
         if k is not None:
-            return k < 256
+            return k < 1 << bits
         kind = e.kind
         if kind == 'var':
-            return e.var.ctype == 'char' or e.var in self.narrow_vars
+            return (self.fits(e.var.ctype, bits) or getattr(e.var, 'boolean', False)
+                    or e.var in self.narrow_vars.get(bits, ()))
         if kind == 'index':
-            return e.var.ctype in ('char', 'bool')
+            return self.fits(e.var.ctype, bits)
         if kind == 'cast':
-            return e.ctype in ('char', 'bool') or self.narrow(e.x)
+            return self.fits(e.ctype, bits) or self.narrow(e.x, bits)
         if kind == 'unary':
             return e.op == '!'
         if kind == 'binary':
             if e.op in COMPARISONS or e.op in ('&&', '||'):
                 return True
             if e.op == '&':
-                return self.narrow(e.l) or self.narrow(e.r)
+                return self.narrow(e.l, bits) or self.narrow(e.r, bits)
             if e.op in ('|', '^'):
-                return self.narrow(e.l) and self.narrow(e.r)
+                return self.narrow(e.l, bits) and self.narrow(e.r, bits)
             if e.op in ('>>', '/'):
-                return self.narrow(e.l) and (e.op == '>>' or self.narrow(e.r))
+                return self.narrow(e.l, bits) and (e.op == '>>' or self.narrow(e.r, bits))
             if e.op == ',':
-                return self.narrow(e.r)
+                return self.narrow(e.r, bits)
             return False
         if kind == 'cond':
-            return self.narrow(e.a) and self.narrow(e.b)
+            return self.narrow(e.a, bits) and self.narrow(e.b, bits)
         if kind in ('assign', 'incdec'):
-            return self.narrow(e.target) if e.target.kind == 'var' or kind == 'assign' else False
+            return self.narrow(e.target, bits) if e.target.kind == 'var' or kind == 'assign' else False
         if kind == 'call':
             if e.name == 'getchar':
-                return True
+                return bits >= 8
             f = self.functions.get(e.name)
-            return f is not None and (f.ctype == 'char' or f.name in self.narrow_functions)
+            return f is not None and (self.fits(f.ctype, bits) or f.name in self.narrow_functions.get(bits, ()))
         return False
 
     def allocate_memory(self):
@@ -2295,21 +2418,17 @@ class Compiler:
         self.memory_top = top
         if self.recursive and self.stack_base >= MEMORY_NIBBLES:
             raise CompileError('no RAM is left for the stack that recursion needs')
-        for v in self.globals.values():
-            if v.length is None:
-                v.slot = Slot(v.name)
+        self.global_slots = pack([v for v in self.globals.values() if v.length is None], 'global')
         for f in self.reachable:
             f.ret_slot = Slot(f'{f.name} return')
-            for v in f.params + f.locals:
-                if v.length is None:
-                    v.slot = Slot(f'{f.name} {v.name}')
+            f.slot_vars = pack([v for v in f.params + f.locals if v.length is None], f.name)
 
     def frame(self, f):
         """The function's status registers, in order: return, parameters, locals."""
-        return [f.ret_slot] + [v.slot for v in f.params + f.locals if v.length is None]
+        return [f.ret_slot] + [slot for slot, _ in f.slot_vars]
 
     def allocate_slots(self):
-        slots = [v.slot for v in self.globals.values() if v.length is None]
+        slots = [slot for slot, _ in self.global_slots]
         for f in self.reachable:
             slots += self.frame(f) + f.temps
         if len(slots) + 1 > STATUS_REGISTERS:
@@ -2404,7 +2523,27 @@ class Compiler:
         if getattr(v, 'boolean', False):
             self.call('QTST')
             self.call('QBOOL')
+        if v.ctype == 'nibble':
+            self.op('FIM', 0, v.slot)
+            self.call(f'QSTN{v.nib}')
+            self.a_holds = v
+            return
         self.load_slot(v.slot, 'QSTAC' if v.ctype == 'char' else 'QSTA')
+
+    def load_var(self, v):
+        if v.ctype != 'nibble':
+            return self.load_slot(v.slot)
+        if self.a_holds is v:
+            return
+        self.op('FIM', 0, v.slot)
+        self.call(f'QLDN{v.nib}')
+        self.a_holds = v
+
+    def load_b_var(self, v):
+        if v.ctype != 'nibble':
+            return self.load_slot(v.slot, 'QLDB')
+        self.op('FIM', 0, v.slot)
+        self.call(f'QLBN{v.nib}')
 
     def push_temp(self):
         f = self.function
@@ -2429,13 +2568,13 @@ class Compiler:
             address = self.constant_address(e)
             self.op('FIM', 0, address & 255)
             self.op('LDM', address >> 8)
-            self.call('QLDBC' if e.var.ctype == 'char' else 'QLDBI')
+            self.call({'char': 'QLDBC', 'nibble': 'QLBIN'}.get(e.var.ctype, 'QLDBI'))
         else:
-            self.load_slot(e.var.slot, 'QLDB')
+            self.load_b_var(e.var)
 
     def load_a(self, e):
         if e.kind == 'var':
-            self.load_slot(e.var.slot)
+            self.load_var(e.var)
         else:
             self.gen(e)
 
@@ -2468,7 +2607,7 @@ class Compiler:
             return
         kind = e.kind
         if kind == 'var':
-            self.load_slot(e.var.slot)
+            self.load_var(e.var)
         elif kind == 'index':
             self.address(e)
             if e.var.ctype == 'bool':
@@ -2521,6 +2660,8 @@ class Compiler:
             self.gen(e.x)
             if e.ctype == 'char':
                 self.truncate()
+            elif e.ctype == 'nibble':
+                self.mask(15)
             elif e.ctype == 'bool':
                 self.call('QTST')
                 self.call('QBOOL')
@@ -2590,7 +2731,7 @@ class Compiler:
         for high, low in zip(reversed(bits), list(reversed(bits))[1:]):
             self.shift('<<', high - low, False)
             if t is None:
-                self.load_slot(e.var.slot, 'QLDB')
+                self.load_b_var(e.var)
             else:
                 self.load_slot(t, 'QLDB')
             self.call('QADD')
@@ -2700,7 +2841,8 @@ class Compiler:
         self.jcn(0xC if when else 4, label)
 
     def narrow_branch(self, op, left, right, label, when):
-        """Jump if (left op right) is when, comparing the low bytes in place."""
+        """Jump if (left op right) is when, comparing in place the low bytes, or the
+        low nibbles when both sides fit in 4 bits."""
         if fold(left) is not None and fold(right) is None:
             left, right, op = right, left, MIRROR[op]
         k = fold(right)
@@ -2718,6 +2860,19 @@ class Compiler:
             self.op('FIM', 10, k)
         else:
             self.operands(left, right)
+        if self.narrow(left, 4) and self.narrow(right, 4):  # one nibble
+            if op in ('==', '!='):
+                self.op('CLC')
+                self.op('LD', 7)
+                self.op('SUB', 11)
+                self.jcn(4 if (op == '==') == when else 0xC, label)
+                return
+            x, y = (7, 11) if op in ('>=', '<') else (11, 7)
+            self.op('CLC')
+            self.op('LD', x)
+            self.op('SUB', y)
+            self.jcn(2 if (op in ('>=', '<=')) == when else 0xA, label)
+            return
         if op in ('==', '!='):
             if (op == '==') == when:  # jump if equal
                 skip = self.label()
@@ -2750,6 +2905,10 @@ class Compiler:
     def narrow_zero(self, e, label, if_zero):
         """Jump if narrow e is zero (if_zero) or nonzero."""
         self.gen(e)
+        if self.narrow(e, 4):
+            self.op('LD', 7)
+            self.jcn(4 if if_zero else 0xC, label)
+            return
         if if_zero:
             skip = self.label()
             self.op('LD', 7)
@@ -2824,7 +2983,7 @@ class Compiler:
             self.load_slot(t)
             self.pop_temp()
             return
-        if target.kind == 'var' and not getattr(target.var, 'boolean', False):
+        if target.kind == 'var' and not getattr(target.var, 'boolean', False) and target.var.ctype != 'nibble':
             char = target.var.ctype == 'char'
             helper = {'++': 'QINCC' if char else 'QINCV', '--': 'QDECC' if char else 'QDECV'}[e.op]
             self.load_slot(target.var.slot, helper)
@@ -2844,8 +3003,8 @@ class Compiler:
         runs = []
         if recursive:  # save the caller's variables that are read after the call, in runs of up to 16
             live = self.live[id(e)]
-            frame = [(caller.ret_slot, True)] + [(v.slot, v in live) for v in caller.params + caller.locals
-                                                 if v.length is None]
+            frame = [(caller.ret_slot, True)] + [(slot, any(v in live for v in vs))
+                                                 for slot, vs in caller.slot_vars]
             frame += [(t, True) for t in caller.temps[:self.depth]]
             for slot, saved in frame:
                 if saved and runs and runs[-1][-1] is previous and len(runs[-1]) < 16:
@@ -3065,6 +3224,8 @@ class Compiler:
                 self.gen(s.e)
                 if self.function.ctype == 'char':
                     self.truncate()
+                elif self.function.ctype == 'nibble':
+                    self.mask(15)
             self.epilogue()
 
     # layout and output
