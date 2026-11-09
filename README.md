@@ -20,7 +20,7 @@ of this repository.
 | `i4004.cxx`, `i4004.hxx` | 4004 and 4040 CPU: instruction decoding, carry, 4002 RAM and status characters, ROM banks, the stack, and cycle accounting. |
 | `ntv4004.cxx`, `trace.hxx` | Command-line host: Intel HEX loader, console ports, speed limiting, and debug and instruction tracing. |
 | `asm4.py` | Assembler for Intel's MAC4 and MAC40 language, checked against them byte for byte. |
-| `examples/` | hello, echo and fib, with their HEX and symbol maps. |
+| `examples/` | hello, echo, fib, and the sieve, e and ttt benchmarks, with their HEX and symbol maps. |
 | `intel/` | Runs Intel's MAC4, MAC40 and INTERP/4 from Tymshare tape 169278 on a PDP-10 runner; not bundled. |
 | `tests/` | CPU tests from the MCS-40 manual, and comparisons with MAC4 and INTERP/4. |
 
@@ -116,15 +116,41 @@ instruction and operand.
 
 ## Examples
 
-| Example | What it does | Instruction cycles |
-| --- | --- | ---: |
-| [hello](examples/hello.asm) | prints a message from a ROM table with `FIN` | 319 |
-| [echo](examples/echo.asm) | copies input to output in uppercase until a period | depends on input |
-| [fib](examples/fib.asm) | prints 70 Fibonacci numbers with 16-digit BCD arithmetic in RAM (`ADM`, `DAA`) | 31,710 (0.34 s on a 4004) |
+| Example | What it does | Instruction cycles | 740 kHz 4004 |
+| --- | --- | ---: | ---: |
+| [hello](examples/hello.asm) | prints a message from a ROM table with `FIN` | 319 | 3.4 ms |
+| [echo](examples/echo.asm) | copies input to output in uppercase until a period | depends on input | |
+| [fib](examples/fib.asm) | prints 70 Fibonacci numbers with 16-digit BCD arithmetic in RAM (`ADM`, `DAA`) | 31,710 | 0.34 s |
+| [sieve](examples/sieve.asm) | the BYTE sieve, 10 passes over 8,190 flags: `1899 primes.` | 7,157,483 | 77.4 s |
+| [e](examples/e.asm) | 192 digits of e from the factorial-series spigot, then `done.` | 10,285,867 | 111.2 s |
+| [ttt](examples/ttt.asm) | alpha-beta tic-tac-toe after first moves 0, 1 and 4: `moves: 6493` | 1,185,782 | 12.8 s |
 
 ```sh
 echo "Hello, world." | ./ntv4004 examples/echo.hex
 ```
+
+sieve, e and ttt are ports of the benchmarks in
+[ntv8008](https://github.com/davidly/ntv8008) and
+[cpm_compilers](https://github.com/davidly/cpm_compilers), and print exactly
+what those do. The 500 kHz 8008 takes 50.9, 19.0 and 15.4 seconds for them.
+The 4004 is slower where it needs more than 4 bits at a time and faster
+where nibbles suffice:
+
+* **sieve** stores the 8,192 flags as bits, four to a 4002 RAM character,
+  using all eight banks. It keeps each index as its bank, character and bit,
+  with the bit times 4 in a nibble so additions carry from field to field.
+  With no AND instruction, a `FIN` table tests and clears bits; its entries
+  sit 40H apart so the loops that use it fit between them, as `FIN` reads its
+  own page.
+* **e** keeps each 8-bit array element in two banks at the same character
+  address, and divides its 12-bit value by shifting and subtracting.
+* **ttt** keeps one frame per search depth in the four status characters of
+  a RAM register, since the 4004's stack has only three levels, and every
+  score fits in a nibble.
+
+Writing 4004 code: `SUB` and `SBM` subtract one more when the carry is 1,
+yet leave the carry 1 when there was no borrow, so complement it (`CMC`)
+between the nibbles of a longer subtraction.
 
 ## Tests
 

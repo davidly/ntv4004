@@ -4,6 +4,7 @@
 These tests need only a built ntv4004 and Python; tests/interp.py compares
 ntv4004 with Intel's own simulator when its images are available.
 """
+from decimal import Decimal, localcontext
 import os
 from pathlib import Path
 import re
@@ -208,6 +209,9 @@ class Console(unittest.TestCase):
         expected = {
             'hello': b'Hello from the Intel 4004!\n',
             'fib': ''.join(f'{n}\n' for n in fibonacci(70)).encode(),
+            'sieve': b'1899 primes.\n',
+            'e': e_digits() + b'\ndone.\n',
+            'ttt': b'moves: 6493\niterations: 1\n',
         }
         for name, output in expected.items():
             with self.subTest(example=name):
@@ -230,6 +234,13 @@ class Console(unittest.TestCase):
             Path(directory, 'high.hex').write_text(asm4.hex_file({0x1000: 0}), encoding='ascii')
             result = subprocess.run([str(NTV), 'high.hex'], cwd=directory, capture_output=True, timeout=60)
             self.assertIn(b'needs the 4040', result.stderr)
+
+
+def e_digits():
+    """The 192 digits of e that the spigot prints."""
+    with localcontext() as context:
+        context.prec = 220
+        return str(Decimal(1).exp()).replace('.', '')[:192].encode()
 
 
 def fibonacci(count):

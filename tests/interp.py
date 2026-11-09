@@ -4,6 +4,7 @@
 Seeded random programs cover the instruction set; the examples must also
 print the same output in the same instruction cycles.
 """
+from decimal import Decimal, localcontext
 import os
 from pathlib import Path
 import random
@@ -135,7 +136,7 @@ def run_interp(memory, symbols, cpu):
     """Return the same state as run_ntv from INTERP."""
     end = interp4.jump_to_self(memory)
     assert len(end) == 1
-    text = interp4.session(memory, symbols, cpu, f'BREAK {end[0]:X}H.\nCYCLE 1000000.\nGO.\nTIME.\nDISPLAY CPU.\n'
+    text = interp4.session(memory, symbols, cpu, f'BREAK 0{end[0]:X}H.\nCYCLE 0F4240H.\nGO.\nTIME.\nDISPLAY CPU.\n'
                                                  'DISPLAY RAM 0 TO 0FH.\n')
     lines = [line for line in text.splitlines() if line.strip()]
     if not any(line.startswith('BREAK AT') for line in lines):
@@ -179,7 +180,7 @@ class Interp(unittest.TestCase):
 
     def run_both(self, path, keys=b''):
         memory, symbols = interp4.load_program(path, '4004')
-        output, cycles, _ = interp4.run_program(memory, symbols, keys=keys)
+        output, cycles, _ = interp4.run_program(memory, symbols, keys=keys, limit=20_000_000)
         result = subprocess.run([str(NTV), '-p', path.name], cwd=path.parent, input=keys, capture_output=True, timeout=600)
         self.assertEqual(result.stdout.replace(b'\r\n', b'\n'), output)
         self.assertIn(f'{cycles} instruction cycles,'.encode(), result.stderr)
@@ -194,6 +195,13 @@ class Interp(unittest.TestCase):
             a, b = b, a + b
         self.assertEqual(self.run_both(examples / 'fib.hex'), ''.join(f'{n}\n' for n in numbers).encode())
         self.assertEqual(self.run_both(examples / 'echo.hex', b'Hello, 4004 world.\n'), b'HELLO, 4004 WORLD.')
+        # The benchmarks print the same as the 8008 and 8080 versions.
+        self.assertEqual(self.run_both(examples / 'sieve.hex'), b'1899 primes.\n')
+        with localcontext() as context:
+            context.prec = 220
+            digits = str(Decimal(1).exp()).replace('.', '')[:192].encode()
+        self.assertEqual(self.run_both(examples / 'e.hex'), digits + b'\ndone.\n')
+        self.assertEqual(self.run_both(examples / 'ttt.hex'), b'moves: 6493\niterations: 1\n')
 
     def test_status_port(self):
         # Poll port 14 before each character; INTERP's answers follow the program's reads.

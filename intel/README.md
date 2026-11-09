@@ -83,6 +83,9 @@ session. Every result matches ntv4004 exactly, including the cycle counts:
 | hello | `Hello from the Intel 4004!` | 319 |
 | echo | its input, in uppercase, up to a period | 353 for `Hello, world.` |
 | fib | the first 70 Fibonacci numbers | 31,710 |
+| sieve | `1899 primes.` | 7,157,483 |
+| e | 192 digits of e, then `done.` | 10,285,867 |
+| ttt | `moves: 6493`, `iterations: 1` | 1,185,782 |
 
 ### INTERP's commands and object format
 
@@ -104,6 +107,8 @@ with `TO`, `SYMBOLS`, `CPU`, `MEMORY`, `PORT` and `RAM`. Working examples:
   rejects addresses above 0FFFH, so INTERP/40 cannot load code for its second
   ROM bank.
 * `BREAK` takes one address. INTERP stops before executing it.
+* Numbers follow `BASE`. In hexadecimal, a number must start with a digit
+  (`0CFH`, not `CFH`), or INTERP reads it as a name.
 * `TIME.` prints instruction cycles and microseconds at 10.8 µs per cycle.
 * Each port write is printed as it happens, `PORT FH = 4H`: ROM ports are
   0 to 0FH, by the chip number in SRC's high nibble, and RAM output ports are

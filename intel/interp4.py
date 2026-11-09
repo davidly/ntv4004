@@ -70,10 +70,12 @@ def run_program(memory, symbols=None, cpu='4004', keys=b'', limit=10_000_000, en
     nibbles = []
     for ch in keys.replace(b'\n', b'\r'):
         nibbles += [ch >> 4, ch & 15]
-    commands = f'BREAK {exits[0]:X}H.\nCYCLE {limit}.\nGO.\n'
+    commands = f'BREAK 0{exits[0]:X}H.\nCYCLE 0{limit:X}H.\nGO.\n'
     answers = nibbles + [0]
     for _ in range(len(nibbles) + 1000):
-        text = session(memory, symbols or {}, cpu, commands + ''.join(f'0{a:X}H\n' for a in answers) + '.\nTIME.\n')
+        # INTERP takes a few hundred PDP-10 instructions per 4004 instruction cycle.
+        text = session(memory, symbols or {}, cpu, commands + ''.join(f'0{a:X}H\n' for a in answers) + '.\nTIME.\n',
+                       budget=2_000_000_000 + 500 * limit)
         asked = [int(m.group(1), 16) for m in map(ASKED.match, (line.strip() for line in text.splitlines())) if m]
         wanted, used = [], 0
         for port in asked:
