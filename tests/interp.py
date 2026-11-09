@@ -202,6 +202,10 @@ class Interp(unittest.TestCase):
             digits = str(Decimal(1).exp()).replace('.', '')[:192].encode()
         self.assertEqual(self.run_both(examples / 'e.hex'), digits + b'\ndone.\n')
         self.assertEqual(self.run_both(examples / 'ttt.hex'), b'moves: 6493\niterations: 1\n')
+        # C compiled by cc4.py, including ttt's recursion through the save stack in RAM.
+        compiled = examples / 'c'
+        self.assertEqual(self.run_both(compiled / 'hello.hex'), b'Hello from C on the Intel 4004!\n')
+        self.assertEqual(self.run_both(compiled / 'ttt.hex'), b'move count:      6493\niteration count: 1\n')
 
     def test_status_port(self):
         # Poll port 14 before each character; INTERP's answers follow the program's reads.

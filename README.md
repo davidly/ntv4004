@@ -1,7 +1,7 @@
 # ntv4004
 
-A portable Intel 4004 and 4040 emulator, a MAC4-compatible assembler, and
-runnable examples, with Intel's own 1970s assemblers and simulator as
+A portable Intel 4004 and 4040 emulator, a MAC4-compatible assembler, a
+compiler for a subset of C, and runnable examples, with Intel's own 1970s assemblers and simulator as
 optional local references. The emulator implements both instruction sets,
 4K (4004) or 8K (4040) of ROM, 4002 RAM, a console on a ROM I/O port,
 instruction tracing and instruction-cycle accounting.
@@ -20,7 +20,9 @@ of this repository.
 | `i4004.cxx`, `i4004.hxx` | 4004 and 4040 CPU: instruction decoding, carry, 4002 RAM and status characters, ROM banks, the stack, and cycle accounting. |
 | `ntv4004.cxx`, `trace.hxx` | Command-line host: Intel HEX loader, console ports, speed limiting, and debug and instruction tracing. |
 | `asm4.py` | Assembler for Intel's MAC4 and MAC40 language, checked against them byte for byte. |
+| `cc4.py` | Compiler for a subset of C, producing MAC4 source and assembling it with asm4.py. |
 | `examples/` | hello, echo, fib, and the sieve, e and ttt benchmarks, with their HEX and symbol maps. |
+| `examples/c/` | hello and the sieve, e and ttt benchmarks in C, with the compiler's output. |
 | `intel/` | Runs Intel's MAC4, MAC40 and INTERP/4 from Tymshare tape 169278 on a PDP-10 runner; not bundled. |
 | `tests/` | CPU tests from the MCS-40 manual, and comparisons with MAC4 and INTERP/4. |
 
@@ -53,7 +55,7 @@ Options:
 | `-s:Hz` | limit speed to a clock rate, such as `-s:740000` |
 | `-p` | report instruction cycles, elapsed time and the 740 kHz runtime |
 | `-r` | report the final registers, stack and RAM on stderr |
-| `-t`, `-i` | trace to `ntv4004.log`; `-i` adds every instruction, labeled from an adjacent `.map` (or `-m:file`) |
+| `-t`, `-i` | trace to `ntv4004.log`; `-i` adds every instruction, labeled from an adjacent `.map` (or `-m:file`), which names an address that has several labels by the first |
 
 A program ends successfully with `HLT` (4040) or a `JUN` to its own address,
 the usual way to stop a 4004. Ctrl-C or Ctrl-Q also exits.
@@ -114,6 +116,66 @@ characters, odd register-pair operands, and `JCN` or `ISZ` targets off the next
 instruction's page. `tests/asm.py` checks it against MAC4 and MAC40 on every
 instruction and operand.
 
+## C compiler
+
+```sh
+python3 cc4.py examples/c/ttt.c         # writes ttt.asm, ttt.hex and ttt.map
+./ntv4004 -p examples/c/ttt.hex
+python3 cc4.py --stats prog.c           # also report ROM and RAM use
+python3 cc4.py -S prog.c                # write only the MAC4 source
+```
+
+No high-level language was made for the 4004 in its day. `cc4.py` compiles
+C without pointers, structures or floating point:
+
+* `int` and `unsigned` are 16 bits and `char` is 8 bits, unsigned. Arrays are
+  one-dimensional; `_Bool` arrays are packed four flags to a RAM character.
+* Functions take parameters and return values, and may be recursive.
+* Every C statement except `switch` and `goto`, and every operator except
+  the pointer, member and `sizeof` operators.
+* `putchar`, `getchar`, `puts`, and `printf` with a constant format and
+  `%d`, `%u`, `%x`, `%c`, `%s` (a string constant) and `%%`.
+* The preprocessor handles `#define` with or without parameters, `#undef`,
+  the `#if` family, and ignores `#include`.
+
+The output is ordinary MAC4 source with the C lines as comments; Intel's
+MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
+
+* Scalars live in the 4002 status characters, one 4-character register
+  each, so a variable's address is one byte: register and bank. Arrays live
+  in main memory. That gives 127 scalars (one register holds the stack
+  pointer) and 2,048 characters for arrays.
+* Arithmetic is done in R4–R7 and R8–R11 by a runtime library of small
+  routines, included only when used. The compiled code keeps track of which
+  variable R4–R7 holds, to skip reloading it.
+* The hardware stack has only three levels, so it is left to the runtime
+  library. A C call stores a return number with the callee and jumps; a
+  return jumps through a table of the call sites. A call that can reach the
+  caller again first saves the caller's variables that are read after it,
+  on a stack in RAM, and restores them afterwards.
+* `JCN` reaches only its own page, so the compiler places the code itself,
+  using `JCN` with the opposite condition around a `JUN` for distant
+  targets, and keeps each library routine and its tables on one page.
+* Programs must fit in the 4004's 4K of ROM. The 4040's second bank is not
+  used.
+
+The C benchmarks are the cpm_compilers sources. sieve's flags are a `_Bool`
+array, since 8,191 `char`s would need eight times the 4002s' memory, and
+ttt's `main` takes no arguments:
+
+| Program | Code + library | Instruction cycles | 740 kHz 4004 | Hand-written assembly |
+| --- | ---: | ---: | ---: | ---: |
+| [hello](examples/c/hello.c) | 94 bytes | 1,775 | 0.02 s | |
+| [e](examples/c/e.c) | 818 bytes | 29,482,646 | 319 s | 2.9 times as long |
+| [sieve](examples/c/sieve.c) | 622 bytes | 55,126,050 | 596 s | 7.7 times |
+| [ttt](examples/c/ttt.c) | 1,626 bytes | 17,465,299 | 189 s | 14.7 times |
+
+e comes closest because most of its time goes to division, which the library
+does much as the hand-written code does. ttt falls furthest behind: each
+recursive call saves and restores eight status registers, which the
+hand-written version avoids by keeping each depth's frame in its own RAM
+register.
+
 ## Examples
 
 | Example | What it does | Instruction cycles | 740 kHz 4004 |
@@ -161,7 +223,12 @@ between the nibbles of a longer subtraction.
 * `tests/cpu.py` checks the instruction definitions above, the page
   boundaries, both stacks, the 4040 instructions and ROM banks, RAM banks,
   the console and the examples. It needs only ntv4004 and Python.
+* `tests/cc.py` compiles and runs 60 seeded random C programs, with every
+  operator, assignment, branch and loop, and checks their output against a
+  Python model of 16-bit C. It also runs programs for functions, recursion,
+  arrays, the library and the preprocessor, and the C examples.
 * `tests/asm.py` and `tests/interp.py` compare asm4.py with Intel's MAC4 and
   ntv4004 with Intel's INTERP/4 and INTERP/40 on 300 random programs and the
   examples, requiring identical registers, RAM, port writes and cycle counts.
+  They include the compiler's output.
   They skip without the images; see [intel/README.md](intel/README.md).

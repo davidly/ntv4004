@@ -72,12 +72,12 @@ static bool load_symbols( const char * path )
         errno = 0;
         unsigned long value = strtoul( address.c_str(), &end, 16 );
         if ( errno || *end || end == address.c_str() || value >= sizeof rom ||
-             !( fields >> name ) || ( fields >> extra ) || g_symbols.count( (uint16_t) value ) )
+             !( fields >> name ) || ( fields >> extra ) )
         {
             fprintf( stderr, "invalid symbol map %s, line %u\n", path, lineNumber );
             return false;
         }
-        g_symbols[ (uint16_t) value ] = name;
+        g_symbols.emplace( (uint16_t) value, name ); // the first of several names for an address labels it
     }
     return !input.bad();
 } //load_symbols

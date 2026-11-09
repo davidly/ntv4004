@@ -1,0 +1,61 @@
+; HELLO: COMPILED FROM C BY CC4.PY
+        ORG 0
+; CLEAR THE RAM
+        LDM 0FH
+        XCH 0DH
+        JMS QCLR
+        JUN MAIN
+MAIN:
+; MAIN
+; PRINTF("HELLO FROM C ON THE INTEL 4004!?N");
+        FIM 0,S0001 AND 0FFH
+        JMS QS1
+; RETURN 0;
+        FIM 4,0
+        FIM 6,0
+        JUN QEXIT
+        JUN QEXIT
+        ORG 012H
+; PRINT THE STRING AT R0R1 ON THIS PAGE.
+QS1:   FIM 14,0F0H
+        SRC 14
+QSL1:  FIN 2
+        LD 2
+        JCN 0CH,QSC1
+        LD 3
+        JCN 4,QSX1
+QSC1:  LD 2
+        WRR
+        LD 3
+        WRR
+        ISZ 1,QSL1
+        INC 0
+        JUN QSL1
+QSX1:  BBL 0
+S0001:
+        DB 048H,065H,06CH,06CH,06FH,020H,066H,072H,06FH,06DH,020H,043H
+        DB 020H,06FH,06EH,020H,074H,068H,065H,020H,049H,06EH,074H,065H
+        DB 06CH,020H,034H,030H,030H,034H,021H,0AH,0
+        ORG 047H
+; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
+QCLR:   LDM 0
+        XCH 12
+QCLB:   LD 12
+        DCL
+        FIM 0,00H
+QCLC:   SRC 0
+        LDM 0
+        WRM
+        ISZ 1,QCLC
+        WR0
+        WR1
+        WR2
+        WR3
+        ISZ 0,QCLC
+        INC 12
+        ISZ 13,QCLB
+        BBL 0
+        ORG 05CH
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
+        END

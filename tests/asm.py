@@ -87,7 +87,7 @@ class Assembler(unittest.TestCase):
         self.compare(DIRECTIVES)
 
     def test_examples(self):
-        for path in sorted((ROOT / 'examples').glob('*.asm')):
+        for path in sorted((ROOT / 'examples').glob('*.asm')) + sorted((ROOT / 'examples' / 'c').glob('*.asm')):
             with self.subTest(example=path.name):
                 source = path.read_text(encoding='ascii')
                 self.compare(source, '4040' if '4040' in path.stem else '4004')

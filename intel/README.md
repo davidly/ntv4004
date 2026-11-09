@@ -86,6 +86,8 @@ session. Every result matches ntv4004 exactly, including the cycle counts:
 | sieve | `1899 primes.` | 7,157,483 |
 | e | 192 digits of e, then `done.` | 10,285,867 |
 | ttt | `moves: 6493`, `iterations: 1` | 1,185,782 |
+| c/hello, compiled by cc4.py | `Hello from C on the Intel 4004!` | 1,775 |
+| c/ttt, compiled by cc4.py | `move count:      6493`, `iteration count: 1` | 17,465,299 |
 
 ### INTERP's commands and object format
 
