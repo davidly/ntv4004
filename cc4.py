@@ -24,6 +24,9 @@ it too. The language is C without pointers, structures or floating point:
   except the pointer, member and sizeof operators.
 * putchar, getchar, puts, and printf with a constant format and %d %u %x %c
   %s (a string constant) and %%.
+* Hardware built-ins, compiled inline: __rom_out(chip, v) and __rom_in(chip)
+  for the 4001 ROM ports, __ram_out(bank, chip, v) for the 4002 output
+  ports, __test() for the TEST pin and __kbp(v) for KBP.
 * #include (ignored), #define with or without parameters, #undef, #if,
   #ifdef, #ifndef, #elif, #else and #endif. __CC4__ is predefined.
 """
@@ -1423,6 +1426,11 @@ QNOTZ:  LD 4
         JCN 0CH,QZF
         BBL 1
 QZF:    BBL 0''')
+runtime('QTEST', '''
+; 1 IN THE ACCUMULATOR IF THE TEST PIN IS HIGH; JCN 1 JUMPS WHEN IT IS LOW.
+QTEST:  JCN 1,QTS0
+        BBL 1
+QTS0:   BBL 0''')
 runtime('QODD', '''
 ; THE LOW BIT OF A, IN THE ACCUMULATOR.
 QODD:   LD 7
@@ -2232,9 +2240,10 @@ STORE = {'int': 'QSTI', 'unsigned': 'QSTI', 'char': 'QSTIC', 'bool': 'QSBIT', 'n
 SIGNED_COMPARE = {'<': 'QSLT', '<=': 'QSLE', '>': 'QSGT', '>=': 'QSGE', '==': 'QEQ', '!=': 'QNE'}
 UNSIGNED_COMPARE = {'<': 'QULT', '<=': 'QULE', '>': 'QUGT', '>=': 'QUGE', '==': 'QEQ', '!=': 'QNE'}
 ARITHMETIC = {'+': 'QADD', '-': 'QSUB', '*': 'QMUL', '&': 'QAND', '|': 'QOR', '^': 'QXOR', '<<': 'QSHL'}
-BUILTINS = {'putchar', 'getchar', 'printf', 'puts'}
+BUILTINS = {'putchar', 'getchar', 'printf', 'puts', '__rom_out', '__rom_in', '__ram_out', '__test', '__kbp'}
+HARDWARE = {'__rom_out': 2, '__rom_in': 1, '__ram_out': 3, '__test': 0, '__kbp': 1}  # built-ins: argument counts
 # Helpers that leave A unchanged, so it still holds the variable last loaded or stored.
-KEEPS_A = {'QLDB', 'QLDBI', 'QLDBC', 'QSTA', 'QTST', 'QNOTZ', 'QODD', 'QEQ', 'QNE', 'QPUTC', 'QSAVE', 'QRSTR'}
+KEEPS_A = {'QLDB', 'QLDBI', 'QLDBC', 'QSTA', 'QTST', 'QTEST', 'QNOTZ', 'QODD', 'QEQ', 'QNE', 'QPUTC', 'QSAVE', 'QRSTR'}
 ACCUMULATOR_ONLY = {'LD', 'LDM', 'CLC', 'CMC', 'STC', 'ADD', 'SUB', 'RAL', 'RAR', 'TCC', 'CMA', 'IAC', 'DAC'}
 MIRROR = {'<': '>', '>': '<', '<=': '>=', '>=': '<=', '==': '==', '!=': '!='}
 LEAVES_SLOT_IN_A = {'QLDA', 'QSTA', 'QSTAC', 'QINCV', 'QINCC', 'QDECV', 'QDECC'}
@@ -2391,6 +2400,8 @@ class Compiler:
         if kind == 'call':
             if e.name == 'getchar':
                 return bits >= 8
+            if e.name in ('__rom_in', '__test', '__kbp'):
+                return True
             f = self.functions.get(e.name)
             return f is not None and (self.fits(f.ctype, bits) or f.name in self.narrow_functions.get(bits, ()))
         return False
@@ -2802,6 +2813,8 @@ class Compiler:
         elif e.kind == 'index' and e.var.ctype == 'bool':
             self.address(e)
             self.call('QLBIT')
+        elif e.kind == 'call' and e.name == '__test':
+            self.call('QTEST')
         elif e.kind == 'unary' and e.op == '!':
             self.gen(e.x)
             self.call('QNOTZ')
@@ -2831,6 +2844,8 @@ class Compiler:
         if e.kind == 'binary' and e.op == ',':
             self.gen(e.l, False)
             return self.branch(e.r, label, when)
+        if e.kind == 'call' and e.name == '__test' and not e.args:  # JCN 1 jumps when TEST is low
+            return self.jcn(9 if when else 1, label)
         if e.kind == 'binary' and e.op in COMPARISONS and self.narrow(e.l) and self.narrow(e.r):
             return self.narrow_branch(e.op, e.l, e.r, label, when)
         plain = not (e.kind == 'binary' and (e.op in COMPARISONS or e.op == '&' and 1 in (fold(e.l), fold(e.r)))
@@ -3082,8 +3097,99 @@ class Compiler:
             if len(args) != 1 or args[0].kind != 'str':
                 raise CompileError(f'line {e.line}: puts takes a string constant')
             self.print_text(args[0].data + b'\n', e.line)
+        elif name in HARDWARE:
+            if len(args) != HARDWARE[name]:
+                raise CompileError(f'line {e.line}: {name} takes {HARDWARE[name]} argument'
+                                   + ('s' if HARDWARE[name] != 1 else ''))
+            self.hardware(e)
         else:
             self.printf(e)
+
+    def hardware(self, e):
+        """The built-ins for the I/O ports, the TEST pin and KBP."""
+        name, args = e.name, e.args
+        if name == '__test':  # 1 when the TEST pin is high
+            self.call('QTEST')
+            self.call('QBOOL')
+            return
+        if name == '__kbp':
+            self.gen(args[0])
+            self.op('LD', 7)
+            self.op('KBP')
+            return self.nibble_result()
+        if name in ('__rom_out', '__rom_in'):  # ROM chip 0 to 15's port: SRC's high nibble
+            value = args[1] if name == '__rom_out' else None
+            chip = fold(args[0])
+            if chip is not None and chip > 15:
+                raise CompileError(f'line {e.line}: ROM chips are 0 to 15')
+            t = None
+            if value is not None and chip is None:
+                self.gen(value)
+                t = self.push_temp()
+                self.load_slot(t, 'QSTA')
+            if chip is None:
+                self.gen(args[0])
+                self.op('LD', 7)
+                self.op('XCH', 14)
+                self.op('LDM', 0)
+                self.op('XCH', 15)
+            if value is not None:
+                if t is None:
+                    self.gen(value)
+                else:
+                    self.load_slot(t)
+                    self.pop_temp()
+            if chip is not None:
+                self.op('FIM', 14, chip << 4)
+            self.op('SRC', 14)
+            if value is not None:
+                self.op('LD', 7)
+                self.op('WRR')
+                return
+            self.op('RDR')
+            return self.nibble_result()
+        # __ram_out(bank, chip, value): the output port of 4002 chip 0 to 3 in bank 0 to 7
+        bank, chip, value = fold(args[0]), fold(args[1]), args[2]
+        if bank is not None and bank > 7 or chip is not None and chip > 3:
+            raise CompileError(f'line {e.line}: RAM banks are 0 to 7 and chips 0 to 3')
+        if bank is not None and chip is not None:
+            self.gen(value)
+            self.op('LDM', bank)
+            self.op('DCL')
+            self.op('FIM', 14, chip << 6)
+        else:
+            self.gen(value)
+            tv = self.push_temp()
+            self.load_slot(tv, 'QSTA')
+            self.gen(args[0])
+            tb = self.push_temp()
+            self.load_slot(tb, 'QSTA')
+            self.gen(args[1])  # SRC's high nibble is chip * 4
+            self.op('CLC')
+            self.op('LD', 7)
+            self.op('RAL')
+            self.op('RAL')
+            self.op('XCH', 14)
+            self.op('LDM', 0)
+            self.op('XCH', 15)
+            self.load_slot(tb)
+            self.op('LD', 7)
+            self.op('XCH', 13)
+            self.load_slot(tv)  # QLDA selects its own bank, so DCL comes after
+            self.pop_temp()
+            self.pop_temp()
+            self.op('LD', 13)
+            self.op('DCL')
+        self.op('SRC', 14)
+        self.op('LD', 7)
+        self.op('WMP')
+
+    def nibble_result(self):
+        """A = the accumulator, a nibble."""
+        self.op('XCH', 7)
+        for register in (6, 5, 4):
+            self.op('LDM', 0)
+            self.op('XCH', register)
 
     def printf(self, e):
         if not e.args or e.args[0].kind != 'str':

@@ -32,6 +32,7 @@
 // The 4004's 740 kHz clock: an instruction cycle of 8 clock periods is 10.8 microseconds.
 static const unsigned g_originalClockHz = 740000;
 static const unsigned g_consolePort = 15, g_statusPort = 14; // ROM I/O ports, selected by SRC
+static bool g_showPorts = false;                               // -o: print other port writes as lamps
 uint8_t rom[ 8192 ];
 static I4004 cpu;
 static CTrace tracer;
@@ -223,11 +224,27 @@ uint8_t i4004_rom_input( uint8_t port )
     return (uint8_t) ( ch >> 4 );
 } //i4004_rom_input
 
+// Print an output port's four lines, bit 3 first: * for 1 and . for 0.
+static void show_port( const char * name, uint8_t value )
+{
+    printf( "%s: %c%c%c%c\n", name, ( value & 8 ) ? '*' : '.', ( value & 4 ) ? '*' : '.', ( value & 2 ) ? '*' : '.',
+            ( value & 1 ) ? '*' : '.' );
+    fflush( stdout );
+} //show_port
+
 void i4004_rom_output( uint8_t port, uint8_t value )
 {
     tracer.Trace( "output ROM port %u, value %x%s\n", port, value, port != g_consolePort ? " (unmapped)" : "" );
     if ( port != g_consolePort )
+    {
+        if ( g_showPorts )
+        {
+            char name[ 32 ];
+            snprintf( name, sizeof name, "ROM port %u", port );
+            show_port( name, value );
+        }
         return;
+    }
     if ( g_outputHigh < 0 )
     {
         g_outputHigh = value;
@@ -242,6 +259,12 @@ void i4004_rom_output( uint8_t port, uint8_t value )
 void i4004_ram_output( uint8_t bank, uint8_t chip, uint8_t value )
 {
     tracer.Trace( "output RAM bank %u chip %u port, value %x\n", bank, chip, value );
+    if ( g_showPorts )
+    {
+        char name[ 32 ];
+        snprintf( name, sizeof name, "RAM bank %u chip %u", bank, chip );
+        show_port( name, value );
+    }
 } //i4004_ram_output
 
 static int hex_value( const std::string & line, size_t offset )
@@ -344,6 +367,7 @@ static void usage()
             "  -t          enable debug tracing to ntv4004.log (overwrites previous log)\n"
             "  -i          include each instruction in the log; requires -t\n"
             "  -m:file     override automatic adjacent .map files for instruction tracing\n"
+            "  -o          show writes to other ROM ports and to RAM output ports as lamps: * on, . off\n"
             "Numbers use decimal, 0x hex, or leading-zero octal.\n"
             "Console: ROM port 15 (SRC 0F0H) writes or reads a character as two nibbles, high first;\n"
             "ROM port 14 reads 1 when a key is ready. LF input becomes CR, CR output becomes LF.\n"
@@ -413,6 +437,7 @@ int main( int argc, char * argv[] )
         if ( options && 0 == strcmp( arg, "-p" ) ) performance = true;
         else if ( options && 0 == strcmp( arg, "-4" ) ) model = I4004::model4040;
         else if ( options && 0 == strcmp( arg, "-r" ) ) report = true;
+        else if ( options && 0 == strcmp( arg, "-o" ) ) g_showPorts = true;
         else if ( options && 0 == strcmp( arg, "-t" ) ) trace = true;
         else if ( options && 0 == strcmp( arg, "-i" ) ) traceInstructions = true;
         else if ( options && 0 == strncmp( arg, "-m:", 3 ) && arg[ 3 ] ) symbolPath = arg + 3;

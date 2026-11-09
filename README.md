@@ -22,7 +22,7 @@ of this repository.
 | `asm4.py` | Assembler for Intel's MAC4 and MAC40 language, checked against them byte for byte. |
 | `cc4.py` | Compiler for a subset of C, producing MAC4 source and assembling it with asm4.py. |
 | `examples/` | hello, echo, fib, and the sieve, e and ttt benchmarks, with their HEX and symbol maps. |
-| `examples/c/` | hello and the sieve, e and ttt benchmarks in C, with the compiler's output. |
+| `examples/c/` | hello, a pedestrian crossing, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
 | `intel/` | Runs Intel's MAC4, MAC40 and INTERP/4 from Tymshare tape 169278 on a PDP-10 runner; not bundled. |
 | `tests/` | CPU tests from the MCS-40 manual, and comparisons with MAC4 and INTERP/4. |
 
@@ -55,6 +55,7 @@ Options:
 | `-s:Hz` | limit speed to a clock rate, such as `-s:740000` |
 | `-p` | report instruction cycles, elapsed time and the 740 kHz runtime |
 | `-r` | report the final registers, stack and RAM on stderr |
+| `-o` | show writes to the other ROM ports and the RAM output ports as lamps, bit 3 first: `ROM port 0: .*.*` |
 | `-t`, `-i` | trace to `ntv4004.log`; `-i` adds every instruction, labeled from an adjacent `.map` (or `-m:file`), which names an address that has several labels by the first |
 
 A program ends successfully with `HLT` (4040) or a `JUN` to its own address,
@@ -72,8 +73,8 @@ selects a ROM chip's port by the high nibble of a register pair, and `WRR` and
 * ROM port 14 reads 1 when a key is ready and 0 otherwise, without waiting.
 * LF input becomes CR, and CR output becomes LF. Characters are 7-bit.
 
-Other ROM ports read 0, and writes to them and to the 4002 output ports
-(`WMP`) appear in the `-t` log. The `TEST` pin is 0.
+Other ROM ports read 0. Writes to them and to the 4002 output ports (`WMP`)
+appear in the `-t` log, and with `-o` on stdout. The `TEST` pin is 0.
 
 ## The CPU
 
@@ -139,6 +140,7 @@ C without pointers, structures or floating point:
   the pointer, member and `sizeof` operators.
 * `putchar`, `getchar`, `puts`, and `printf` with a constant format and
   `%d`, `%u`, `%x`, `%c`, `%s` (a string constant) and `%%`.
+* Built-ins for the hardware, compiled inline: see [Hardware](#hardware).
 * The preprocessor handles `#define` with or without parameters, `#undef`,
   the `#if` family, and ignores `#include`.
 
@@ -154,9 +156,10 @@ MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
   routines, included only when used. The compiled code keeps track of which
   variable R4–R7 holds, to skip reloading it.
 * Values known to fit in 0 to 255 are compared in 8 bits, inline, without
-  calling the library, and values that fit in 0 to 15 in 4 bits. Besides `char`s, constants and comparisons, these
-  include the `int` and `unsigned` variables, parameters and functions that
-  are only ever given such values, which the compiler finds by elimination.
+  calling the library, and values that fit in 0 to 15 in 4 bits. Besides
+  `char`s, constants and comparisons, these include the `int` and `unsigned`
+  variables, parameters and functions that are only ever given such values,
+  which the compiler finds by elimination.
 * The hardware stack has only three levels, so it is left to the runtime
   library. A C call stores a return number with the callee and jumps; a
   return jumps through a table of the call sites. A call that can reach the
@@ -186,6 +189,40 @@ does much as the hand-written code does. ttt falls furthest behind: each
 recursive call saves and restores five status registers (eight with `char`
 instead of `__nibble`), which the hand-written version avoids by keeping
 each depth's frame in its own RAM register.
+
+### Hardware
+
+A 4004 program usually controls something, so these built-ins reach the
+hardware directly. Each compiles to a few instructions; another compiler
+can supply them as `#define`s, and `__CC4__` tells a program which it has.
+
+| Built-in | Instructions | Does |
+| --- | --- | --- |
+| `__rom_out(chip, v)` | `SRC`, `WRR` | writes `v`'s low nibble to 4001 ROM chip 0–15's port |
+| `__rom_in(chip)` | `SRC`, `RDR` | reads ROM chip 0–15's port |
+| `__ram_out(bank, chip, v)` | `DCL`, `SRC`, `WMP` | writes `v`'s low nibble to 4002 chip 0–3's output port in bank 0–7 |
+| `__test()` | `JCN 1` | 1 if the `TEST` pin is high |
+| `__kbp(v)` | `KBP` | the keyboard-process code of `v`'s low nibble: 0–4, or 15 |
+
+Chips and banks may be variables. ntv4004's console is ROM ports 14 and 15,
+and `-o` shows the other ports' lamps.
+[traffic.c](examples/c/traffic.c) is a pedestrian crossing: ROM port 0
+drives the road's lamps and port 1 the crossing's, a key press is the
+button, and delay loops time the phases for a 740 kHz 4004:
+
+```sh
+python3 cc4.py examples/c/traffic.c
+./ntv4004 -o -s:740000 examples/c/traffic.hex     # press a key to cross
+```
+
+```
+ROM port 0: ...*
+ROM port 1: ..*.
+road green; press a key to cross
+ROM port 0: ..*.
+ROM port 1: ..*.
+road amber
+```
 
 ## Examples
 

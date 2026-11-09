@@ -23,13 +23,13 @@ import cc4  # noqa: E402
 NTV = ROOT / ('ntv4004.exe' if os.name == 'nt' else 'ntv4004')
 
 
-def run_c(source, limit=50_000_000, keys=None):
+def run_c(source, limit=50_000_000, keys=None, options=()):
     """Compile and run C source; return its output as text."""
     text, _ = cc4.compile_source(source)
     memory, _, _ = asm4.Assembler('4004').assemble(text)
     with tempfile.TemporaryDirectory(prefix='ntv4004 cc ') as directory:
         Path(directory, 'p.hex').write_text(asm4.hex_file(memory), encoding='ascii')
-        command = [str(NTV), f'-n:{limit}']
+        command = [str(NTV), f'-n:{limit}', *options]
         if keys is not None:
             Path(directory, 'keys.txt').write_bytes(keys)
             command.append('-l:keys.txt')
@@ -555,6 +555,45 @@ class Compiler(unittest.TestCase):
         digits, done = output.split('\n', 1)
         self.assertEqual(digits, e_digits(len(digits)))
         self.assertEqual((len(digits), done), (192, 'done\n'))
+
+    def test_hardware(self):
+        source = '''
+int main()
+{
+    int chip, bank;
+    __rom_out(3, 5);
+    for (chip = 0; chip < 3; chip++) __rom_out(chip, chip + 8);
+    __ram_out(2, 1, 12);
+    for (bank = 0; bank < 2; bank++)
+        for (chip = 2; chip < 4; chip++)
+            __ram_out(bank, chip, bank * 4 + chip);
+    printf("%d %d %d\\n", __rom_in(4), __rom_in(chip + 1), __rom_in(14));
+    printf("%d %d %d %d %d\\n", __test(), __kbp(0), __kbp(4), __kbp(8), __kbp(3));
+    if (__test()) puts("high"); else puts("low");
+    return 0;
+}
+'''
+        expected = ('ROM port 3: .*.*\nROM port 0: *...\nROM port 1: *..*\nROM port 2: *.*.\n'
+                    'RAM bank 2 chip 1: **..\nRAM bank 0 chip 2: ..*.\nRAM bank 0 chip 3: ..**\n'
+                    'RAM bank 1 chip 2: .**.\nRAM bank 1 chip 3: .***\n'
+                    '0 0 0\n0 0 3 4 15\nlow\n')  # ntv4004's other input ports and TEST pin read 0
+        self.assertEqual(run_c(source, options=('-o',)), expected)
+        for call in ('__rom_out(16, 1)', '__ram_out(8, 0, 1)', '__ram_out(0, 4, 1)', '__rom_in()'):
+            with self.subTest(call), self.assertRaises(cc4.CompileError):
+                cc4.compile_source(f'int main() {{ {call}; return 0; }}')
+
+    def test_traffic(self):
+        def lamps(road, crossing):
+            def bits(value):
+                return f'{value:04b}'.replace('0', '.').replace('1', '*')
+            return [f'ROM port 0: {bits(road)}', f'ROM port 1: {bits(crossing)}']
+        lines = lamps(1, 2) + ['road green; press a key to cross']
+        for _ in range(2):  # one crossing for each key press
+            lines += lamps(2, 2) + ['road amber'] + lamps(4, 2) + lamps(4, 1) + ['walk']
+            lines += (lamps(4, 0) + lamps(4, 1)) * 4 + lamps(4, 2) + lamps(1, 2) + ['road green']
+        expected = '\n'.join(lines) + '\n'
+        source = (ROOT / 'examples' / 'c' / 'traffic.c').read_text()
+        self.assertEqual(run_c(source, keys=b'xy', options=('-o',)), expected)
 
     def test_errors(self):
         cases = {

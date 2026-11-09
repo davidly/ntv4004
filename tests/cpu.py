@@ -205,6 +205,13 @@ class Console(unittest.TestCase):
         state, _, _ = run(source, keys=b'A')
         self.assertEqual(state['regs'][3:5], [1, 0])
 
+    def test_port_display(self):
+        # -o shows writes to other ROM ports and to RAM output ports, bit 3 first.
+        source = ('        FIM 0,30H\n        SRC 0\n        LDM 5\n        WRR\n        LDM 2\n        DCL\n'
+                  '        FIM 0,40H\n        SRC 0\n        LDM 0CH\n        WMP\n' + end())
+        self.assertEqual(run(source, options=('-o',))[1], b'ROM port 3: .*.*\nRAM bank 2 chip 1: **..\n')
+        self.assertEqual(run(source)[1], b'')
+
     def test_examples(self):
         expected = {
             'hello': b'Hello from the Intel 4004!\n',
