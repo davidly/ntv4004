@@ -591,6 +591,66 @@ class Compiler(unittest.TestCase):
         self.assertEqual(digits, e_digits(len(digits)))
         self.assertEqual((len(digits), done), (192, 'done\n'))
 
+    def test_maze(self):
+        source = (ROOT/'examples/c/maze.c').read_text()
+        if not SIZE:
+            assembly, compiler = cc4.compile_source(source, 'maze')
+            memory, symbols, _ = asm4.Assembler().assemble(assembly)
+            for suffix, content in (('asm',assembly), ('hex',asm4.hex_file(memory)),
+                                    ('map',asm4.map_file(symbols))):
+                self.assertEqual(content, (ROOT/f'examples/c/maze.{suffix}').read_text())
+            self.assertLessEqual(compiler.rom_end, 4096)
+            self.assertLessEqual(compiler.memory_top, 2048)
+        mazes = set()
+        for seed in (0, 37, 255):
+            with self.subTest(seed=seed):
+                output = run_c(source.replace('#define SEED 37', f'#define SEED {seed}'))
+                lines = output.splitlines()
+                self.assertEqual((lines[0],lines[12]), ('MAZE','SOLUTION'))
+                self.assertEqual(len(lines), 24)
+                maze, solution = lines[1:12], lines[13:24]
+                mazes.add(tuple(maze))
+                for row in maze+solution:
+                    self.assertEqual(len(row), 11)
+                self.assertTrue(all(ch in '# ' for row in maze for ch in row))
+                self.assertEqual([row.replace('.', ' ') for row in solution], maze)
+                # Exactly two boundary openings, above cell 0 and below cell 24.
+                self.assertEqual(maze[0], '# #########')
+                self.assertEqual(maze[-1], '######### #')
+                self.assertTrue(all(row[0] == row[-1] == '#' for row in maze))
+                graph = {i:[] for i in range(25)}
+                edges = 0
+                for cell in range(25):
+                    y, x = 2*(cell//5)+1, 2*(cell%5)+1
+                    self.assertEqual(maze[y][x], ' ')
+                    for dy,dx,other in ((0,1,cell+1),(1,0,cell+5)):
+                        if dy and cell == 24: continue  # external exit, not a tree edge
+                        if maze[y+dy][x+dx] == ' ':
+                            self.assertLess(other, 25)
+                            if dx: self.assertNotEqual(cell%5, 4)
+                            graph[cell].append(other)
+                            graph[other].append(cell)
+                            edges += 1
+                # A connected graph with 25 vertices and 24 edges is a tree:
+                # every cell is reachable, with exactly one route to the exit.
+                self.assertEqual(edges, 24)
+                parents = {0:None}
+                queue = [0]
+                for cell in queue:
+                    for other in graph[cell]:
+                        if other not in parents:
+                            parents[other] = cell
+                            queue.append(other)
+                self.assertEqual(len(parents), 25)
+                route = set()
+                cell = 24
+                while cell is not None:
+                    route.add(cell)
+                    cell = parents[cell]
+                marked = {i for i in range(25) if solution[2*(i//5)+1][2*(i%5)+1] == '.'}
+                self.assertEqual(marked, route)
+        self.assertGreater(len(mazes), 1)
+
     def test_hardware(self):
         source = '''
 int main()

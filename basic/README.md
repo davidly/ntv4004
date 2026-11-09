@@ -16,6 +16,7 @@ From the repository root:
 ./ntv4004 -p -l:basic/examples/fib.bas basic/basic.hex
 ./ntv4004 -l:basic/examples/squares.bas basic/basic.hex
 ./ntv4004 -l:basic/examples/input.bas basic/basic.hex
+./ntv4004 -l:basic/examples/mastermind.bas basic/basic.hex
 ./ntv4004 -p -l:basic/examples/e.bas basic/basic.hex
 ./ntv4004 -p -l:basic/examples/sieve.bas basic/basic.hex
 ```
@@ -136,6 +137,43 @@ speed-oriented profile. It occupies 4,012 stored bytes and ends at ROM byte 4,01
 of 4,096, including placement gaps. Its arrays use 1,928 of 2,048 main RAM nibbles
 (964 bytes); scalars use 56 of 128 status registers. There is no parser recursion
 or dynamically allocated array. Both the original 4004 ROM and RAM limits hold.
+
+## Mastermind
+
+`examples/mastermind.bas` is a four-digit guessing game using digits 1 through
+6, with repetitions allowed. It fits the standard interpreter in **30 lines
+and 342 stored bytes**. After each valid guess it prints `E` followed by the
+number of digits in the correct position, then `M` followed by the number of
+correct digits in other positions. A digit is counted only as often as it
+occurs in the secret; exact matches are excluded from the misplaced count.
+`E4` wins and ends the program.
+
+The secret is deliberately fixed at **1123** so the example and tests are
+reproducible. The `.bas` file includes three demonstration guesses after `RUN`:
+1234 scores `E1 M2`, 1111 scores `E2 M0`, and 1123 scores `E4 M0`, then `WIN`.
+Run the demonstration with:
+
+```sh
+./ntv4004 -l:basic/examples/mastermind.bas basic/basic.hex
+```
+
+To play with keyboard input, run `./ntv4004 basic/basic.hex`, paste the numbered
+lines and `RUN` from the file, and then type your guesses instead of the three
+sample inputs. Alternatively, edit the guesses after `RUN` in a copy of the
+file. A `-l` file cannot switch to keyboard input when it runs out.
+
+A guess must contain exactly four digits, each from 1 to 6. An invalid guess
+within the interpreter's unsigned decimal input range simply repeats the
+prompt without a score. Malformed input or a number above 65535 stops with the
+usual BASIC input error. The program has no guess limit. It resets the secret's
+remaining digit counts in `@(1)` through `@(3)` before each attempt, tallies the
+total matches by consuming those counts, and subtracts exact matches to obtain
+misplaced matches. The secret integer in line 6 and the frequencies in lines
+2–4 must agree if you change the secret.
+
+The supplied three-guess game takes **1,417,296 instruction cycles**, about
+**15.32 seconds** at 740 kHz, excluding I/O waits. Interactive time depends on
+your guesses and typing. Tests also verify the game in Intel's INTERP/4.
 
 ## e benchmark
 

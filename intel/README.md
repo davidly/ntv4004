@@ -146,9 +146,10 @@ operand, the directives and the examples. `tests/interp.py` runs 150 seeded
 random programs each in INTERP/4 and INTERP/40 and requires ntv4004 to finish
 with the same accumulator, carry, index registers (both 4040 banks), SRC,
 command lines, stack, RAM, port writes and instruction cycles, and it runs the
-examples and a status-polling program in both simulators. The five small BASIC
-examples (hello, count, Fibonacci, squares and input) also run to completion in
-INTERP/4, with their expected output and ntv4004 cycle counts checked. Both skip when the
+examples and a status-polling program in both simulators. The small BASIC
+examples (hello, count, Fibonacci, squares, input and Mastermind) also run to completion in
+INTERP/4, with their expected output and ntv4004 cycle counts checked. The C maze
+generator/solver is checked against ntv4004 as well. Both skip when the
 images are missing.
 
 ## Runner notes

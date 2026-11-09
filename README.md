@@ -23,7 +23,7 @@ of this repository.
 | `asm4.py` | Assembler for Intel's MAC4 and MAC40 language, checked against them byte for byte. |
 | `cc4.py` | Compiler for a subset of C, producing MAC4 source and assembling it with asm4.py. |
 | `examples/` | hello, echo, fib, and the sieve, e and ttt benchmarks, with their HEX and symbol maps. |
-| `examples/c/` | hello, a pedestrian crossing, a 4040 clock run by interrupts, eight queens, the Towers of Hanoi, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
+| `examples/c/` | hello, a pedestrian crossing, a 4040 clock run by interrupts, eight queens, the Towers of Hanoi, a maze generator/solver, and the sieve, e and ttt benchmarks in C, with the compiler's output. |
 | `basic/` | Native 4004 BASIC interpreter, its C source and generated ROM image, and BASIC examples. |
 | `intel/` | Runs Intel's MAC4, MAC40 and INTERP/4 from Tymshare tape 169278 on a PDP-10 runner; not bundled. |
 | `tests/` | CPU tests from the MCS-40 manual, and comparisons with MAC4 and INTERP/4. |
@@ -93,13 +93,14 @@ then `RUN`; the stored program executes once and stops.
 ./ntv4004 -l:basic/examples/hello.bas basic/basic.hex
 ./ntv4004 -p -l:basic/examples/fib.bas basic/basic.hex
 ./ntv4004 -l:basic/examples/input.bas basic/basic.hex
+./ntv4004 -l:basic/examples/mastermind.bas basic/basic.hex
 ./ntv4004 -p -l:basic/examples/e.bas basic/basic.hex
 ./ntv4004 -p -l:basic/examples/sieve.bas basic/basic.hex
 ./ntv4004 -p -l:basic/examples/ttt.bas basic/large.hex
 python3 basic/build.py --all                # rebuild both interpreter ROMs
 ```
 
-The examples include counting, Fibonacci, squares, numerical input and a
+The examples include counting, Fibonacci, squares, numerical input, Mastermind and a
 192-digit decimal-spigot e benchmark, plus a ten-pass segmented sieve counting
 1899 odd primes. The sieve uses the same 200-element array and fits in 32 lines
 and 381 stored bytes. `@(I)` accesses the array and a trailing
@@ -113,6 +114,11 @@ packed program storage, line numbers 1–255, and no `INPUT`. Its iterative
 alpha-beta search checks all three distinct openings and reports 6493 moves.
 Both interpreter profiles fit the original 4004 ROM and RAM limits.
 See [basic/README.md](basic/README.md) for the complete syntax, limits and errors.
+
+`mastermind.bas` demonstrates an interactive guessing game with duplicate-aware
+scoring: `E` counts exact positions and `M` counts misplaced digits. Its sample
+input plays three guesses against the fixed secret 1123. See the
+[Mastermind instructions](basic/README.md#mastermind) to play interactively.
 
 Measured BASIC benchmark runtimes include loading and executing the source on
 the emulated 4004. Estimated hardware times use a 740 kHz clock and exclude I/O
@@ -243,6 +249,7 @@ and `char` elsewhere:
 | [ttt](examples/c/ttt.c) | 1,688 bytes | 11,958,168 | 129 s | 10.1 times |
 | [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s | |
 | [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s | |
+| [maze](examples/c/maze.c) | 1,944 bytes | 460,917 | 4.98 s | |
 
 queens counts the 92 solutions to the eight queens problem by recursive
 backtracking, with packed `_Bool` arrays for the columns and diagonals, and
@@ -256,6 +263,32 @@ does much as the hand-written code does. ttt falls furthest behind: each
 recursive call saves and restores five status registers (eight with `char`
 instead of `__nibble`), which the hand-written version avoids by keeping
 each depth's frame in its own RAM register.
+
+### Maze generator and solver
+
+```sh
+python3 cc4.py --stats examples/c/maze.c
+./ntv4004 -p examples/c/maze.hex
+```
+
+[maze.c](examples/c/maze.c) generates a 5×5 perfect maze, prints it, then marks
+the unique route from the upper-left entrance to the lower-right exit with
+`.` in each solution cell. Both generation and solving use iterative
+depth-first search with an explicit 25-cell stack, rather than recursion.
+Each cell's four passage bits occupy a single `__nibble`; visited and solution
+flags use packed `_Bool` arrays. Main RAM use is 90 nibbles (45 bytes), plus
+20 status registers for scalars and runtime state.
+
+An eight-bit linear congruential generator chooses the first direction to try.
+`SEED` is fixed at 37 for reproducible output; change it to another value from
+0 through 255 and rebuild for a different maze. This is a small demonstration
+PRNG, not a uniform sampler of mazes. The source also compiles with a host C
+compiler, using `unsigned char` in place of `__nibble`.
+
+Tests check several seeds in both compiler profiles: all 25 cells must be
+reachable, the maze must contain exactly 24 internal passages, and the marked
+solution must match an independently reconstructed route. The default ROM
+also runs in Intel's INTERP/4 with matching ntv4004 output and cycle counts.
 
 ### Smaller ROMs
 
@@ -401,14 +434,17 @@ between the nibbles of a longer subtraction.
 * `tests/cc.py` compiles and runs 60 seeded random C programs, with every
   operator, assignment, branch and loop, and checks their output against a
   Python model of 16-bit C. It also runs programs for functions, recursion,
-  arrays, the library and the preprocessor, and the C examples.
+  arrays, the library and the preprocessor, and the C examples, including maze
+  connectivity and solution checks across several seeds.
 * `tests/basic.py` checks the native interpreter, generated ROM, storage limits,
   integer arithmetic, array bounds, input, printing, the 192-digit e program,
-  and the full ten-pass sieve plus segment-boundary variants.
+  and the full ten-pass sieve plus segment-boundary variants. Mastermind tests
+  compare repeated-digit scoring against independent frequency counts and
+  exercise invalid guesses followed by a successful game.
 * `tests/asm.py` and `tests/interp.py` compare asm4.py with Intel's MAC4 and
   ntv4004 with Intel's INTERP/4 and INTERP/40 on 300 random programs and the
   examples, requiring identical registers, RAM, port writes and cycle counts.
-  They include the compiler's output and the five small BASIC examples (hello,
-  count, Fibonacci, squares and input), checking BASIC output and cycle counts
+  They include the compiler's output and the small BASIC examples (hello,
+  count, Fibonacci, squares, input and Mastermind), checking BASIC output and cycle counts
   against ntv4004.
   They skip without the images; see [intel/README.md](intel/README.md).

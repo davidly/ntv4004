@@ -115,6 +115,31 @@ class Basic(unittest.TestCase):
         self.check('10 INPUT A\n20 INPUT Z\n30 PRINT A+Z\n40 END\nRUN\n 2\n\n3\n',
                    '? ? 5\n')
 
+    def test_mastermind(self):
+        from collections import Counter
+        source = (ROOT/'basic/examples/mastermind.bas').read_text()
+        program, _ = source.split('RUN\n', 1)
+        self.check_program_limits(program+'RUN\n')
+        prompt = '4 DIGITS 1-6\n? '
+        self.check(source, prompt+'E1\nM2\n'+prompt+'E2\nM0\n'+prompt+'E4\nM0\nWIN\n')
+        rng = random.Random(4004)
+        guesses = [0, 17, 7000, 11111, 1234, 1111, 2222, 3333, 6666, 3211]
+        guesses += [int(''.join(str(rng.randrange(1,7)) for _ in range(4))) for _ in range(30)]
+        guesses = [g for g in guesses if g != 1123]+[1123]
+        expected = ''
+        secret = '1123'
+        for guess in guesses:
+            expected += prompt
+            digits = str(guess)
+            if len(digits) != 4 or any(d not in '123456' for d in digits):
+                continue
+            exact = sum(a == b for a,b in zip(secret,digits))
+            matches = sum((Counter(secret) & Counter(digits)).values())
+            expected += f'E{exact}\nM{matches-exact}\n'
+        expected += 'WIN\n'
+        self.assertEqual(self.execute(program+'RUN\n'+''.join(f'{g}\n' for g in guesses),
+                                      budget=30_000_000), 'BASIC4\n'+expected)
+
     def test_precedence_and_unsigned_wrap(self):
         for expression, expected in (('2+3*4', 14), ('20/3/2', 3), ('9-3-2', 4),
                                      ('65535+1', 0), ('0-1', 65535), ('65535*2', 65534),

@@ -218,10 +218,17 @@ class Interp(unittest.TestCase):
                 ('count', b'1\n2\n3\n4\n5\n'),
                 ('fib', b'FIBONACCI\n0\n1\n1\n2\n3\n5\n8\n13\n21\n34\n'),
                 ('squares', b'1\n4\n9\n16\n25\n'),
-                ('input', b'ENTER A NUMBER\n? 43\n')):
+                ('input', b'ENTER A NUMBER\n? 43\n'),
+                ('mastermind', b'4 DIGITS 1-6\n? E1\nM2\n4 DIGITS 1-6\n? E2\nM0\n'
+                 b'4 DIGITS 1-6\n? E4\nM0\nWIN\n')):
             with self.subTest(name=name):
                 keys = (examples / (name + '.bas')).read_bytes()
                 self.assertEqual(self.run_both(image, keys), b'BASIC4\n' + expected)
+
+    def test_maze_example(self):
+        output = self.run_both(ROOT / 'examples/c/maze.hex')
+        self.assertTrue(output.startswith(b'MAZE\n# #########\n'))
+        self.assertEqual(output.count(b'SOLUTION\n'), 1)
 
     def test_status_port(self):
         # Poll port 14 before each character; INTERP's answers follow the program's reads.
