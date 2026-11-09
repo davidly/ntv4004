@@ -6,8 +6,14 @@ pushd "%~dp0" || exit /b 1
 call m.bat || goto failed
 if "%PYTHON%"=="" set "PYTHON=python"
 for %%t in (cpu cc basic basic_large asm interp) do (
+    echo.
+    echo === tests\%%t.py ===
     "%PYTHON%" tests\%%t.py || goto failed
-    if "%%t"=="cc" "%PYTHON%" tests\cc.py --size || goto failed
+    if "%%t"=="cc" (
+        echo.
+        echo === tests\cc.py --size ===
+        "%PYTHON%" tests\cc.py --size || goto failed
+    )
 )
 popd
 exit /b 0
