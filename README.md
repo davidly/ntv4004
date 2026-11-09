@@ -6,8 +6,9 @@ optional local references. The emulator implements both instruction sets,
 4K (4004) or 8K (4040) of ROM, 4002 RAM, a console on a ROM I/O port,
 instruction tracing and instruction-cycle accounting.
 
-This builds and runs on Windows, macOS and Linux (tested on Ubuntu and
-Windows).
+This builds and runs on Windows, macOS and Linux. The complete test suite,
+including the optional Intel assembler and simulator comparisons, has been
+validated on macOS, Ubuntu Linux and Windows.
 
 Project code is **BSD-3-Clause**; see [LICENSE](LICENSE). Intel's historical
 tools in [intel/](intel/README.md) are optional local inputs and are not part
