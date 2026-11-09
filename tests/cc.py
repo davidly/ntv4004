@@ -426,6 +426,46 @@ int main()
     return 0;
 }
 ''', '16 1 3\n'),
+    'narrow': ('''
+char c = 200;
+int n;
+int w;
+int k = 5;
+int m;
+char small(int x) { return x; }
+int pick(int x, int y) { return x > y ? x : y; }
+int wide(int x) { return x; }
+int main()
+{
+    n = c;
+    w = c;
+    if (n > 150) putchar('a');
+    if (n == 200) putchar('b');
+    if (n != 199) putchar('c');
+    if (n <= 200) putchar('d');
+    if (n < 200) putchar('X');
+    if (pick(c, 7) >= 200) putchar('e');
+    if (pick(3, 9) == 9) putchar('f');
+    w = 300;
+    if (w > 250) putchar('g');
+    if (w == 44) putchar('X');
+    k++;
+    if (k == 6) putchar('h');
+    if (small(300) == 44) putchar('i');
+    if (wide(c + 100) > 255) putchar('j');
+    n = 0;
+    if (n) putchar('X');
+    if (!n) putchar('k');
+    if (n >= 0) putchar('l');
+    if (n < 0) putchar('X');
+    if (c / 3 == 66 && c % 3 == 2) putchar('m');
+    if ((c >> 2) == 50) putchar('n');
+    m = -1;
+    if (m < 0 && m != 255) putchar('o');
+    printf(" %d %d\\n", n < c, c > 199);
+    return 0;
+}
+''', 'abcdefghijklmno 1 1\n'),
     'arrays': ('''
 int squares[20];
 char letters[26];

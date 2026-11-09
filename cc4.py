@@ -2120,6 +2120,8 @@ ARITHMETIC = {'+': 'QADD', '-': 'QSUB', '*': 'QMUL', '&': 'QAND', '|': 'QOR', '^
 BUILTINS = {'putchar', 'getchar', 'printf', 'puts'}
 # Helpers that leave A unchanged, so it still holds the variable last loaded or stored.
 KEEPS_A = {'QLDB', 'QLDBI', 'QLDBC', 'QSTA', 'QTST', 'QNOTZ', 'QODD', 'QEQ', 'QNE', 'QPUTC', 'QSAVE', 'QRSTR'}
+ACCUMULATOR_ONLY = {'LD', 'LDM', 'CLC', 'CMC', 'STC', 'ADD', 'SUB', 'RAL', 'RAR', 'TCC', 'CMA', 'IAC', 'DAC'}
+MIRROR = {'<': '>', '>': '<', '<=': '>=', '>=': '<=', '==': '==', '!=': '!='}
 LEAVES_SLOT_IN_A = {'QLDA', 'QSTA', 'QSTAC', 'QINCV', 'QINCC', 'QDECV', 'QDECC'}
 MEMORY_NIBBLES = 2048
 STATUS_REGISTERS = 128
@@ -2192,6 +2194,7 @@ class Compiler:
         order = ['main'] + sorted(self.reach['main'], key=lambda n: self.functions[n].line)
         self.reachable = [self.functions[n] for n in order]
         self.recursive = any(f.name in self.reach[f.name] for f in self.reachable)
+        self.infer_narrow()
         names = set(asm4.MNEMONICS) | asm4.DIRECTIVES | asm4.OPERATORS
         keys = set()
         for i, f in enumerate(self.reachable, 1):
@@ -2201,6 +2204,73 @@ class Compiler:
                 label = f'F{i:04d}'
             keys.add(label)
             f.label = label
+
+    def infer_narrow(self):
+        """Find the int and unsigned variables and functions whose values always fit in
+        0 to 255: assume all do, then drop any written with a wider value, by a compound
+        assignment, ++ or --, until nothing changes."""
+        self.narrow_vars = {v for v in self.globals.values() if v.length is None and v.ctype != 'char'
+                            and (v.init is None or fold(v.init) < 256)}
+        for f in self.reachable:
+            self.narrow_vars |= {v for v in f.params + f.locals if v.length is None and v.ctype != 'char'}
+        self.narrow_functions = {f.name for f in self.reachable if f.ctype in ('int', 'unsigned')}
+        changed = True
+        while changed:
+            before = (len(self.narrow_vars), len(self.narrow_functions))
+            for f in self.reachable:
+                for s in statements(f.body):
+                    if s.kind == 'decl':
+                        for var, init in s.items:
+                            if init is not None and not self.narrow(init):
+                                self.narrow_vars.discard(var)
+                    elif s.kind == 'return' and (s.e is None or not self.narrow(s.e)):
+                        self.narrow_functions.discard(f.name)
+                for e in expressions(f.body):
+                    if e.kind in ('assign', 'incdec') and e.target.kind == 'var':
+                        if e.kind == 'incdec' or e.op != '=' or not self.narrow(e.value):
+                            self.narrow_vars.discard(e.target.var)
+                    elif e.kind == 'call' and e.name not in BUILTINS:
+                        for arg, param in zip(e.args, self.functions[e.name].params):
+                            if not self.narrow(arg):
+                                self.narrow_vars.discard(param)
+            changed = before != (len(self.narrow_vars), len(self.narrow_functions))
+
+    def narrow(self, e):
+        """Whether e's value is always 0 to 255, so it can be compared in 8 bits."""
+        k = fold(e)
+        if k is not None:
+            return k < 256
+        kind = e.kind
+        if kind == 'var':
+            return e.var.ctype == 'char' or e.var in self.narrow_vars
+        if kind == 'index':
+            return e.var.ctype in ('char', 'bool')
+        if kind == 'cast':
+            return e.ctype in ('char', 'bool') or self.narrow(e.x)
+        if kind == 'unary':
+            return e.op == '!'
+        if kind == 'binary':
+            if e.op in COMPARISONS or e.op in ('&&', '||'):
+                return True
+            if e.op == '&':
+                return self.narrow(e.l) or self.narrow(e.r)
+            if e.op in ('|', '^'):
+                return self.narrow(e.l) and self.narrow(e.r)
+            if e.op in ('>>', '/'):
+                return self.narrow(e.l) and (e.op == '>>' or self.narrow(e.r))
+            if e.op == ',':
+                return self.narrow(e.r)
+            return False
+        if kind == 'cond':
+            return self.narrow(e.a) and self.narrow(e.b)
+        if kind in ('assign', 'incdec'):
+            return self.narrow(e.target) if e.target.kind == 'var' or kind == 'assign' else False
+        if kind == 'call':
+            if e.name == 'getchar':
+                return True
+            f = self.functions.get(e.name)
+            return f is not None and (f.ctype == 'char' or f.name in self.narrow_functions)
+        return False
 
     def allocate_memory(self):
         arrays = [v for v in self.globals.values() if v.length is not None]
@@ -2280,7 +2350,7 @@ class Compiler:
         if mnemonic == 'JUN':
             self.incoming.setdefault(operands[0], []).append(self.a_holds)
         self.falls = mnemonic != 'JUN'
-        if not (mnemonic == 'JMS' and operands[0] in KEEPS_A or mnemonic in ('LD', 'LDM')
+        if not (mnemonic == 'JMS' and operands[0] in KEEPS_A or mnemonic in ACCUMULATOR_ONLY
                 or mnemonic in ('FIM', 'XCH') and operands[0] not in (4, 5, 6, 7)):
             self.a_holds = None
 
@@ -2496,13 +2566,15 @@ class Compiler:
             if op == '/':
                 return self.shift('>>', right.bit_length() - 1, True)
             return self.mask(right - 1)
+        if self.narrow(e.l) and self.narrow(e.r):
+            unsigned = True  # nothing negative: the unsigned routines skip the signs
         self.operands(e.l, e.r)
         if op == '/':
             helper = 'QUDIV' if unsigned else 'QSDIV'
         elif op == '%':
             helper = 'QUMOD' if unsigned else 'QSMOD'
         elif op == '>>':
-            helper = 'QUSHR' if etype(e.l) == 'unsigned' else 'QSHR'
+            helper = 'QUSHR' if etype(e.l) == 'unsigned' or self.narrow(e.l) else 'QSHR'
         else:
             helper = ARITHMETIC[op]
         self.call(helper)
@@ -2575,7 +2647,7 @@ class Compiler:
             self.gen(e.l if right == 0 else e.r)
             self.call('QNOTZ' if e.op == '==' else 'QTST')
             return
-        unsigned = 'unsigned' in (etype(e.l), etype(e.r))
+        unsigned = 'unsigned' in (etype(e.l), etype(e.r)) or self.narrow(e.l) and self.narrow(e.r)
         self.operands(e.l, e.r)
         self.call((UNSIGNED_COMPARE if unsigned else SIGNED_COMPARE)[e.op])
 
@@ -2618,8 +2690,78 @@ class Compiler:
         if e.kind == 'binary' and e.op == ',':
             self.gen(e.l, False)
             return self.branch(e.r, label, when)
+        if e.kind == 'binary' and e.op in COMPARISONS and self.narrow(e.l) and self.narrow(e.r):
+            return self.narrow_branch(e.op, e.l, e.r, label, when)
+        plain = not (e.kind == 'binary' and (e.op in COMPARISONS or e.op == '&' and 1 in (fold(e.l), fold(e.r)))
+                     or e.kind == 'index' and e.var.ctype == 'bool')
+        if plain and self.narrow(e):
+            return self.narrow_zero(e, label, not when)
         self.flag(e)
         self.jcn(0xC if when else 4, label)
+
+    def narrow_branch(self, op, left, right, label, when):
+        """Jump if (left op right) is when, comparing the low bytes in place."""
+        if fold(left) is not None and fold(right) is None:
+            left, right, op = right, left, MIRROR[op]
+        k = fold(right)
+        if k == 0:  # against zero: test the nibbles
+            if op in ('>=', '<'):
+                if (op == '>=') == when:
+                    self.gen(left, False)
+                    self.jump(label)
+                else:
+                    self.gen(left, False)
+                return
+            return self.narrow_zero(left, label, (op in ('==', '<=')) == when)
+        if k is not None:
+            self.gen(left)
+            self.op('FIM', 10, k)
+        else:
+            self.operands(left, right)
+        if op in ('==', '!='):
+            if (op == '==') == when:  # jump if equal
+                skip = self.label()
+                self.op('CLC')
+                self.op('LD', 7)
+                self.op('SUB', 11)
+                self.jcn(0xC, skip)
+                self.op('CLC')
+                self.op('LD', 6)
+                self.op('SUB', 10)
+                self.jcn(4, label)
+                self.place(skip, True)
+            else:
+                for a, b in ((7, 11), (6, 10)):
+                    self.op('CLC')
+                    self.op('LD', a)
+                    self.op('SUB', b)
+                    self.jcn(0xC, label)
+            return
+        # The carry is 1 when X >= Y: A >= B for >= and <, B >= A for <= and >.
+        x, y = ((7, 6), (11, 10)) if op in ('>=', '<') else ((11, 10), (7, 6))
+        self.op('CLC')
+        self.op('LD', x[0])
+        self.op('SUB', y[0])
+        self.op('CMC')
+        self.op('LD', x[1])
+        self.op('SUB', y[1])
+        self.jcn(2 if (op in ('>=', '<=')) == when else 0xA, label)
+
+    def narrow_zero(self, e, label, if_zero):
+        """Jump if narrow e is zero (if_zero) or nonzero."""
+        self.gen(e)
+        if if_zero:
+            skip = self.label()
+            self.op('LD', 7)
+            self.jcn(0xC, skip)
+            self.op('LD', 6)
+            self.jcn(4, label)
+            self.place(skip, True)
+        else:
+            self.op('LD', 7)
+            self.jcn(0xC, label)
+            self.op('LD', 6)
+            self.jcn(0xC, label)
 
     # array elements
 

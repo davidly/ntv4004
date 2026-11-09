@@ -148,6 +148,10 @@ MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
 * Arithmetic is done in R4–R7 and R8–R11 by a runtime library of small
   routines, included only when used. The compiled code keeps track of which
   variable R4–R7 holds, to skip reloading it.
+* Values known to fit in 0 to 255 are compared in 8 bits, inline, without
+  calling the library. Besides `char`s, constants and comparisons, these
+  include the `int` and `unsigned` variables, parameters and functions that
+  are only ever given such values, which the compiler finds by elimination.
 * The hardware stack has only three levels, so it is left to the runtime
   library. A C call stores a return number with the callee and jumps; a
   return jumps through a table of the call sites. A call that can reach the
@@ -169,7 +173,7 @@ ttt's `main` takes no arguments:
 | [hello](examples/c/hello.c) | 94 bytes | 1,775 | 0.02 s | |
 | [e](examples/c/e.c) | 818 bytes | 29,482,646 | 319 s | 2.9 times as long |
 | [sieve](examples/c/sieve.c) | 622 bytes | 55,126,050 | 596 s | 7.7 times |
-| [ttt](examples/c/ttt.c) | 1,612 bytes | 17,233,057 | 186 s | 14.5 times |
+| [ttt](examples/c/ttt.c) | 1,732 bytes | 14,602,719 | 158 s | 12.3 times |
 
 e comes closest because most of its time goes to division, which the library
 does much as the hand-written code does. ttt falls furthest behind: each
