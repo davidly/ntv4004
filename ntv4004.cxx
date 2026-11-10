@@ -39,6 +39,10 @@ uint8_t rom[ 8192 ];
 static I4004 cpu;
 static CTrace tracer;
 static FILE * g_input = stdin;
+static bool g_forceLineConsole = false, g_lineConsole = false;
+static std::string g_consoleLine;
+static size_t g_consolePosition = 0;
+static bool g_skipLineFeed = false;
 static volatile sig_atomic_t g_stopped = 0;
 static bool g_eof = false;
 static int g_pendingInput = -1;
@@ -143,7 +147,7 @@ static int read_character()
 // A status read never waits, consumes a character, or ends the emulation at EOF.
 static bool keyboard_ready()
 {
-    if ( g_pendingInput >= 0 || g_inputLow >= 0 )
+    if ( g_consolePosition < g_consoleLine.size() || g_pendingInput >= 0 || g_inputLow >= 0 )
         return true;
     if ( g_inputEof )
         return false;
@@ -169,7 +173,7 @@ static bool keyboard_ready()
     return !g_inputEof;
 } //keyboard_ready
 
-static int next_character()
+static int raw_character()
 {
     int ch;
     if ( g_pendingInput >= 0 )
@@ -187,16 +191,83 @@ static int next_character()
         if ( 0 == ch || 0xe0 == ch )
         {
             _getch();
-            return 0x7f;
+            return g_lineConsole ? 0 : 0x7f;
         }
         return ch;
     }
 #endif
     return read_character();
+} //raw_character
+
+// Guests opt into an echoed line console by querying ROM port 13. Raw-key
+// applications never query it, so games retain their existing input behavior.
+static int next_character()
+{
+    if ( !g_lineConsole ) return raw_character();
+    if ( g_consolePosition < g_consoleLine.size() )
+        return (unsigned char) g_consoleLine[ g_consolePosition++ ];
+    g_consoleLine.clear();
+    g_consolePosition = 0;
+    unsigned escape = 0;
+    for ( ;; )
+    {
+        int ch = raw_character();
+        if ( EOF == ch || 3 == ch || 17 == ch ) return ch;
+        if ( g_skipLineFeed )
+        {
+            g_skipLineFeed = false;
+            if ( '\n' == ch ) continue;
+        }
+        if ( '\r' == ch || '\n' == ch )
+        {
+            g_skipLineFeed = ( '\r' == ch );
+            g_consoleLine += '\r';
+            putchar( '\n' );
+            fflush( stdout );
+            return (unsigned char) g_consoleLine[ g_consolePosition++ ];
+        }
+        if ( 27 == ch ) { escape = 1; continue; }
+        if ( escape )
+        {
+            if ( 1 == escape && '[' == ch ) escape = 2;
+            else if ( 1 == escape || ( ch >= 0x40 && ch <= 0x7e ) ) escape = 0;
+            continue;
+        }
+        if ( 8 == ch || 127 == ch )
+        {
+            if ( !g_consoleLine.empty() )
+            {
+                g_consoleLine.pop_back();
+                fputs( "\b \b", stdout );
+            }
+        }
+        else
+        {
+            if ( '\t' == ch ) ch = ' ';
+            if ( ch < 32 || ch > 126 ) continue;
+            if ( g_consoleLine.size() < 4096 )
+            {
+                g_consoleLine += (char) ch;
+                putchar( ch );
+            }
+            else putchar( '\a' );
+        }
+        fflush( stdout );
+    }
 } //next_character
 
 uint8_t i4004_rom_input( uint8_t port )
 {
+    if ( 13 == port )
+    {
+#ifdef _WIN32
+        bool terminal = stdin == g_input && _isatty( _fileno( stdin ) );
+#else
+        bool terminal = stdin == g_input && isatty( STDIN_FILENO );
+#endif
+        g_lineConsole = g_forceLineConsole || terminal;
+        return g_lineConsole ? 1 : 0;
+    }
     if ( g_statusPort == port )
         return keyboard_ready() ? 1 : 0;
     if ( g_consolePort != port )
@@ -360,6 +431,7 @@ static void usage()
     printf( "Intel 4004/4040 console machine\n"
             "usage: ntv4004 [options] file.hex [more.hex ...]\n"
             "  -4          emulate the 4040 (default 4004)\n"
+            "  -c          offer an echoed line console even with file or redirected input\n"
             "  -a:address  entry address (default 0)\n"
             "  -l:file     read keyboard input from a file (EOF exits)\n"
             "  -n:cycles   stop after at least this many instruction cycles; failure if not ended\n"
@@ -373,6 +445,7 @@ static void usage()
             "  -I:cycles   4040: request an interrupt every this many instruction cycles; HLT waits for it\n"
             "Numbers use decimal, 0x hex, or leading-zero octal.\n"
             "Console: ROM port 15 (SRC 0F0H) writes or reads a character as two nibbles, high first;\n"
+            "ROM port 13 offers an echoed line console on a terminal (or with -c); reading it opts in.\n"
             "ROM port 14 reads 1 when a key is ready. LF input becomes CR, CR output becomes LF.\n"
             "Ctrl-C or Ctrl-Q exits. HLT or a JUN to its own address ends the program successfully,\n"
             "unless a timer interrupt (-I) can still be taken.\n" );
@@ -451,6 +524,7 @@ int main( int argc, char * argv[] )
         if ( options && 0 == strcmp( arg, "--" ) ) { options = false; continue; }
         if ( options && ( 0 == strcmp( arg, "--help" ) || 0 == strcmp( arg, "-h" ) ) ) { usage(); return 0; }
         if ( options && 0 == strcmp( arg, "-p" ) ) performance = true;
+        else if ( options && 0 == strcmp( arg, "-c" ) ) g_forceLineConsole = true;
         else if ( options && 0 == strcmp( arg, "-4" ) ) model = I4004::model4040;
         else if ( options && 0 == strcmp( arg, "-r" ) ) report = true;
         else if ( options && 0 == strcmp( arg, "-o" ) ) g_showPorts = true;

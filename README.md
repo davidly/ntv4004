@@ -52,6 +52,7 @@ Options:
 | --- | --- |
 | `-4` | emulate the 4040 (default 4004) |
 | `-a:address` | entry address (default 0); above 0FFFH starts in the 4040's second ROM bank |
+| `-c` | offer the interactive line console even with redirected/file input |
 | `-l:file` | read console input from a file; EOF ends the program |
 | `-n:cycles` | stop after this many instruction cycles; exit status 2 if the program has not ended |
 | `-s:Hz` | limit speed to a clock rate, such as `-s:740000` |
@@ -76,6 +77,10 @@ selects a ROM chip's port by the high nibble of a register pair, and `WRR` and
   with two `WRR`s, high nibble first; read one with two `RDR`s, high nibble
   first. The first read waits for a key.
 * ROM port 14 reads 1 when a key is ready and 0 otherwise, without waiting.
+* ROM port 13 returns 1 on a keyboard terminal (or with `-c`), otherwise 0.
+  Reading it opts into an echoed line console when available. Subsequent port
+  15 reads receive a completed line, with Backspace editing and a CR terminator.
+  Raw-key applications retain their existing behavior by not reading port 13.
 * LF input becomes CR, and CR output becomes LF. Characters are 7-bit.
 
 Other ROM ports read 0. Writes to them and to the 4002 output ports (`WMP`)
@@ -86,8 +91,12 @@ appear in the `-t` log, and with `-o` on stdout. The `TEST` pin is 0.
 `basic/basic.hex` runs on the original 4004 and interprets BASIC source read
 through the emulated console. There is no host-side BASIC parser or compiler.
 It supports 26 unsigned 16-bit variables, one 200-element integer array, `LET`, `PRINT`, `INPUT`,
-`IF ... THEN`, `GOTO`, `REM` and `END`. Type numbered lines in increasing order,
-then `RUN`; the stored program executes once and stops.
+`IF ... THEN`, `GOTO`, `REM` and `END`. Run `./ntv4004 basic/basic.hex` for an
+interactive `READY`/`>` prompt with input echo and Backspace editing. Type
+uppercase direct statements, or enter numbered lines in increasing order and
+use `RUN`, `LIST`, `NEW`, and `BYE`. `RUN` clears variables, retains the program,
+and returns to the prompt. File input (`-l` or a pipe) retains load-once batch
+behavior and its existing output.
 
 ```sh
 ./ntv4004 -l:basic/examples/hello.bas basic/basic.hex
@@ -126,9 +135,9 @@ waits; these are instruction cycles, each taking eight clock periods.
 
 | BASIC benchmark | Workload | Interpreter ROM | Instruction cycles | 740 kHz 4004 |
 | --- | --- | --- | ---: | ---: |
-| [sieve](basic/examples/sieve.bas) | Ten segmented passes; 1899 odd primes from 3 through 16383 | `basic.hex` | 10,841,654,825 | 117,207.08 s (32 h 33 min) |
-| [e](basic/examples/e.bas) | 192 digits using the factorial-series spigot | `basic.hex` | 933,594,623 | 10,092.91 s (2 h 48 min) |
-| [ttt](basic/examples/ttt.bas) | One iteration over three distinct openings; 6493 moves | `large.hex` | 8,687,256,898 | 93,916.29 s (26 h 5 min) |
+| [sieve](basic/examples/sieve.bas) | Ten segmented passes; 1899 odd primes from 3 through 16383 | `basic.hex` | 10,875,546,541 | 117,573.48 s (32 h 39 min) |
+| [e](basic/examples/e.bas) | 192 digits using the factorial-series spigot | `basic.hex` | 935,396,425 | 10,112.39 s (2 h 48 min) |
+| [ttt](basic/examples/ttt.bas) | One iteration over three distinct openings; 6493 moves | `large.hex` | 8,688,987,816 | 93,935.00 s (26 h 5 min) |
 
 The BASIC sieve uses segmentation to fit its 200-element array, so its timing
 should be reported separately from the unsegmented assembly and C versions.
@@ -398,7 +407,7 @@ can supply them as `#define`s, and `__CC4__` tells a program which it has.
 | `__test()` | `JCN 1` | 1 if the `TEST` pin is high |
 | `__kbp(v)` | `KBP` | the keyboard-process code of `v`'s low nibble: 0–4, or 15 |
 
-Chips and banks may be variables. ntv4004's console is ROM ports 14 and 15,
+Chips and banks may be variables. ntv4004's console uses ROM ports 13–15,
 and `-o` shows the other ports' lamps.
 [traffic.c](examples/c/traffic.c) is a pedestrian crossing: ROM port 0
 drives the road's lamps and port 1 the crossing's, a key press is the
@@ -545,7 +554,9 @@ between the nibbles of a longer subtraction.
   displayed frames against an independent model, partial redraws, and controls.
 * `tests/basic.py` checks the native interpreter, generated ROM, storage limits,
   integer arithmetic, array bounds, input, printing, the 192-digit e program,
-  and the full ten-pass sieve plus segment-boundary variants. Mastermind tests
+  and the full ten-pass sieve plus segment-boundary variants. Interactive tests
+  cover prompts, echo/editing, direct commands, repeated runs, errors, and a
+  real terminal session. Mastermind tests
   compare repeated-digit scoring against independent frequency counts and
   exercise invalid guesses followed by a successful game.
 * `tests/asm.py` and `tests/interp.py` compare asm4.py with Intel's MAC4 and

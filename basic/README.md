@@ -21,30 +21,76 @@ From the repository root:
 ./ntv4004 -p -l:basic/examples/sieve.bas basic/basic.hex
 ```
 
-On Windows, use `ntv4004.exe`. The interpreter also works under `-4`, but does
-not require any 4040 instructions. For interactive use, run the ROM without `-l`
-and enter a complete program, followed by `RUN` on its own line:
+On Windows, use `ntv4004.exe`. For an interactive session, run:
 
-```basic
-10 LET A=1
-20 PRINT A*A
-30 LET A=A+1
-40 IF A<=5 THEN 20
-50 END
-RUN
+```sh
+./ntv4004 basic/basic.hex
 ```
 
-The banner is `BASIC4`. Programs execute once; `END`, falling off the last line,
-or an error stops the interpreter. There is no line editor, `LIST`, or second
-`RUN` session. Numbered lines must be supplied in strictly increasing order.
-`RUN` must have a terminating newline. EOF ends emulation; it does not implicitly
-run a program. File input should be ASCII, with either LF or CRLF line endings.
+BASIC prints `BASIC4`, `READY (UPPERCASE)`, and a `> ` prompt. Type uppercase
+keywords and press Enter. Input is echoed, and Backspace (or Delete/backspace
+on Unix terminals) corrects the current line before you submit it. For example:
 
-For `INPUT`, type unsigned decimal digits after the `? ` prompt. Blank input
-lines and leading spaces are skipped. In a file, put the numerical input after
-`RUN`: `input.bas` includes `21` as its sample input. Console input is not echoed
-by the interpreter. A `-l` file remains the input source throughout execution;
-the interpreter cannot switch to the keyboard when that file ends.
+```text
+> PRINT 2+2
+4
+> 10 LET A=A+1
+> 20 PRINT A
+> 30 END
+> LIST
+10 LET A=A+1
+20 PRINT A
+30 END
+> RUN
+1
+READY (UPPERCASE)
+> RUN
+1
+READY (UPPERCASE)
+> BYE
+```
+
+| Command | Behavior |
+| --- | --- |
+| `RUN` | Clear variables and the array, then run the stored program; retain its source. |
+| `LIST` | Print the numbered program. |
+| `NEW` | Clear the program, variables, and array. |
+| `BYE` | Exit BASIC. Ctrl-C or Ctrl-Q also ends emulation. |
+
+Statements can also execute directly at the prompt. `LET`, `PRINT`, `INPUT`,
+and `REM` work without a line number. Immediate `GOTO` and a taken `IF ... THEN`
+start executing the stored program at their target, preserving variables.
+`END` ends the current execution and returns to the prompt. Program completion
+and errors also return to the prompt; errors preserve the stored source.
+
+Numbered lines must still be entered in strictly increasing order. Backspace
+edits the line being typed; stored-line replacement, deletion, and insertion
+are not implemented. Use `NEW` to enter a revised program. Direct statements
+and command lines are limited to 47 characters; numbered source retains its
+existing 384-byte total storage limit and can have longer individual lines.
+Strings preserve case; BASIC keywords and variable names must be uppercase.
+
+For `INPUT`, type unsigned decimal digits after the `? ` prompt. Typed numbers
+are echoed and can be corrected before Enter. Blank input lines and leading
+spaces are skipped. A malformed input line is consumed before returning to the
+prompt, so its remaining characters are not mistaken for commands.
+
+With `-l:file` or redirected standard input, the interpreter keeps batch
+behavior: it loads a complete numbered program followed by `RUN`, executes
+once, and stops at `END`, the end of the program, or an error. Input is not
+echoed and no interactive prompts are printed. Numerical input belongs after
+`RUN` in the file; `input.bas` includes `21`. EOF ends emulation without an
+implicit `RUN`; each command needs its terminating newline. A `-l` file does
+not switch to the keyboard when it ends. Files should be ASCII, with LF or
+CRLF line endings. `-c` forces the interactive line console for redirected/file
+input, primarily for scripted sessions and tests; finish such sessions with
+`BYE`.
+
+The larger-program `large.hex` profile accepts echoed numbered-line entry
+on a terminal, then runs once after `RUN`. Its packed loader retains its
+original load-once model; the full prompt commands above apply to `basic.hex`.
+Both ROMs run on the original 4004; `-4` is optional and no 4040 instructions
+are required.
 
 ## Language
 
@@ -131,13 +177,16 @@ python3 tests/basic_large.py
 ./test.sh                         # Windows: test.bat
 ```
 
-The checked-in `.asm`, `.hex` and `.map` are reproducible outputs of `cc4.py`
-with **`--size` required**. The expanded interpreter is too large in the normal
-speed-oriented profile, needing 4,305 bytes. With `--size` it occupies 3,219
-stored bytes and ends at ROM byte 3,224 of 4,096, including placement gaps,
-leaving 872 bytes free; the larger-program profile ends at byte 3,208. Its arrays use 1,928 of 2,048 main RAM nibbles
-(964 bytes); scalars use 56 of 128 status registers. There is no parser recursion
-or dynamically allocated array. Both the original 4004 ROM and RAM limits hold.
+The checked-in `.asm`, `.hex` and `.map` are reproducible outputs of
+`python3 basic/build.py --all`, using **`--size`** compilation. The interactive
+standard interpreter occupies 4,037 stored bytes and ends at ROM byte 4,040 of
+4,096, including placement gaps. Its arrays and 48-byte command scratch buffer
+use 2,024 of 2,048 main RAM nibbles (1,012 bytes); scalars use 72 of 128 status
+registers. The command buffer temporarily swaps with the first 48 bytes of
+source while a direct statement is parsed, then restores them. This permits
+direct commands and `NEW` even when all 384 program bytes are occupied. The
+packed larger-program profile ends at ROM byte 3,340. There is no parser
+recursion or dynamically allocated array; both original 4004 limits hold.
 
 ## Mastermind
 
@@ -172,8 +221,8 @@ total matches by consuming those counts, and subtracts exact matches to obtain
 misplaced matches. The secret integer in line 6 and the frequencies in lines
 2–4 must agree if you change the secret.
 
-The supplied three-guess game takes **1,505,317 instruction cycles**, about
-**16.27 seconds** at 740 kHz, excluding I/O waits. Interactive time depends on
+The supplied three-guess game takes **1,514,714 instruction cycles**, about
+**16.38 seconds** at 740 kHz, excluding I/O waits. Interactive time depends on
 your guesses and typing. Tests also verify the game in Intel's INTERP/4.
 
 ## e benchmark
@@ -185,7 +234,7 @@ value is 27; subsequent output values are single digits, joined using `PRINT X;`
 The BASIC program uses 20 lines and 220 stored bytes, including line terminators.
 
 It prints the `BASIC4` banner, 192 digits, a newline, then `done` and another newline.
-One complete load/run takes **933,594,623 instruction cycles**, about **10,092.91
+One complete load/run takes **935,396,425 instruction cycles**, about **10,112.39
 seconds (2 hours 48 minutes)** on a 740 kHz 4004, excluding I/O waits. Host
 emulation is much faster. For a finite emulator budget, allow at least
 `-n:1200000000` cycles. Source is parsed and executed on the emulated CPU; there
@@ -216,8 +265,8 @@ segment. All odd divisors are considered, including composite divisors whose
 marking is redundant; this avoids storing a separate base-prime table.
 
 This is a segmented variant, so report its timings separately from the original
-unsegmented sieve. A complete ten-pass load/run takes **10,841,654,825 instruction
-cycles**, about **117,207.08 seconds (32 hours 33 minutes)** at 740 kHz, excluding
+unsegmented sieve. A complete ten-pass load/run takes **10,875,546,541 instruction
+cycles**, about **117,573.48 seconds (32 hours 39 minutes)** at 740 kHz, excluding
 I/O waits. Host emulation took about 49 seconds on the development machine.
 If using `-n`, allow `-n:12000000000`. Output is:
 
@@ -254,9 +303,9 @@ same C interpreter. It trades the large array and `INPUT` for program storage:
 | Line numbers | 1–65535 | 1–255 |
 | Integer array | `@(0)`–`@(199)` | `@(0)`–`@(63)` |
 | `INPUT` | Supported | Unsupported |
-| ROM end, including gaps | 4015 bytes | 3932 bytes |
-| Main RAM | 1928 nibbles | 2024 nibbles |
-| Status registers | 56 | 61 |
+| ROM end, including gaps | 4040 bytes | 3340 bytes |
+| Main RAM | 2024 nibbles | 2024 nibbles |
+| Status registers | 72 | 64 |
 
 The larger profile loads ordinary ASCII BASIC on the 4004. Its native loader
 replaces statement keywords and `THEN` with single-byte tokens and removes
@@ -276,9 +325,19 @@ board cells occupy 0–8, frames occupy 16–51, and the eight winning triples o
 56–63. No recursive calls or host-side search are required. The source has 91
 numbered lines and fits the packed source buffer.
 
-A complete native load/run takes **8,687,256,898 instruction cycles**, about
-**93,916.29 seconds (26 hours 5 minutes)** at 740 kHz, excluding I/O waits.
+A complete native load/run takes **8,688,987,816 instruction cycles**, about
+**93,935.00 seconds (26 hours 5 minutes)** at 740 kHz, excluding I/O waits.
 Host emulation took about 38 seconds on the development machine. The regression
 test runs the full search and checks the exact output; it also checks packed
 storage boundaries, CRLF input, branches, scalar `T` versus `THEN`, array bounds,
-and reproducible ROM builds. The standard interpreter remains unchanged in size.
+and reproducible ROM builds. The standard interpreter includes the interactive command loop; the packed
+profile remains a load-once interpreter.
+
+Interactive tests exercise repeated runs, direct statements, listing and reset,
+full line/text capacity, source preservation after errors, malformed input,
+CRLF, backspace/Delete, and a real POSIX pseudo-terminal. They also check that
+terminal settings are restored on exit. Forced-console tests run on Windows.
+Current benchmark counts above include the regenerated ROMs built with the
+latest compiler. Compared with the preceding ROMs, batch benchmarks use less
+than 1% more cycles; the interactive standard ROM retains the original 4 KB
+limit and the existing program and array capacities.

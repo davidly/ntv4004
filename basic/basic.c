@@ -15,8 +15,15 @@ char text[SPACE];
 unsigned labels[LINES], offsets[LINES], vars[26+CELLS];
 #endif
 
-unsigned used, pos, line;
-char count, error, done;
+unsigned used, pos;
+#ifdef LARGE
+unsigned line;
+#else
+char line;              /* At most 32 stored lines. */
+char command[48];
+char quitting;
+#endif
+char count, error, done, interactive;
 
 void blanks()
 {
@@ -178,7 +185,8 @@ void inputvar()
         }
         while (ch == ' ' || ch == 9) ch = getchar();
         if (ch != 13 && ch != 10) error = 1;
-        vars[variable] = value;
+        if (!error) vars[variable] = value;
+        if (interactive) while (ch != 13 && ch != 10) ch = getchar();
     }
 }
 
@@ -307,17 +315,99 @@ void packedline(char command)
 }
 #endif
 
+void runprogram()
+{
+#ifdef LARGE
+    while (!error && !done && line < used) {
+        pos = line+1;
+        line = pos;
+        while (text[line]) line++;
+        line++;
+#else
+    while (!error && !done && line < count) {
+        pos = offsets[line++];
+#endif
+        statement();
+    }
+}
+
+#ifndef LARGE
+/* Reuse the existing statement parser without overwriting a full program.
+   Every console parse swaps the saved source back, including error paths. */
+void swapline()
+{
+    char i, ch;
+    for (i = 0; i < 48; i++) {
+        ch = command[i]; command[i] = text[i]; text[i] = ch;
+    }
+}
+
+void clearvars()
+{
+    unsigned i;
+    for (i = 0; i < 26+CELLS; i++) vars[i] = 0;
+}
+
+_Bool consoleline(char ch)
+{
+    char length, i, action;
+    length = 0;
+    while (ch != 13 && ch != 10) {
+        if (length < 47) command[length++] = ch;
+        else error = 6;
+        ch = getchar();
+    }
+    command[length] = 0;
+    if (error) return 0;
+    swapline();
+    pos = 0; ch = text[pos++]; action = ch;
+    if (ch == 'R' && text[pos] == 'U') { need('U'); need('N'); }
+    else if (ch == 'N') { need('E'); need('W'); }
+    else if (ch == 'B') { need('Y'); need('E'); }
+    else if (ch == 'L' && text[pos] == 'I') { need('I'); need('S'); need('T'); }
+    else {
+        pos--; action = 0; line = count;
+        statement();
+    }
+    blanks(); if (text[pos]) error = 1;
+    swapline();
+    if (!error) {
+        if (action == 'R') return 1;
+        if (action == 'B') { quitting = 1; return 1; }
+        if (action == 'N') { used = 0; count = 0; clearvars(); }
+        else if (action == 'L') {
+            for (i = 0; i < count; i++) {
+                printf("%u ", labels[i]); pos = offsets[i];
+                while (text[pos]) putchar(text[pos++]);
+                putchar(10);
+            }
+        } else runprogram();
+    }
+    return 0;
+}
+#endif
+
 void load()
 {
     char ch;
-    unsigned label;
+    unsigned label, mark;
 #ifdef LARGE
     unsigned previous;
     previous = 0;
 #endif
     while (!error) {
-        ch = getchar();
-        while (ch == 13 || ch == 10 || ch == ' ' || ch == 9) ch = getchar();
+        done = 0; mark = used;
+        do {
+            if (interactive) printf("> ");
+            ch = getchar();
+            while (ch == ' ' || ch == 9) ch = getchar();
+        } while (ch == 13 || ch == 10);
+#ifndef LARGE
+        if (interactive && ch >= 'A' && ch <= 'Z') {
+            if (consoleline(ch)) return;
+            continue;
+        }
+#endif
         if (ch == 'R') {
             if (getchar() != 'U' || getchar() != 'N') error = 1;
             ch = getchar();
@@ -332,14 +422,16 @@ void load()
             label = label * 10 + ch - '0';
             ch = getchar();
         }
-        if (error) return;
-        if (ch != ' ' && ch != 9) error = 1;
+        if (!error && ch != ' ' && ch != 9) error = 1;
 #ifdef LARGE
-        if (!label || label > 255 || label <= previous) error = 5;
+        if (!error && (!label || label > 255 || label <= previous)) error = 5;
 #else
-        if (!label || count == LINES || (count && label <= labels[count-1])) error = 5;
+        if (!error && (!label || count == LINES || (count && label <= labels[count-1]))) error = 5;
 #endif
-        if (error) return;
+        if (error) {
+            if (interactive) while (ch != 13 && ch != 10) ch = getchar();
+            return;
+        }
         while (ch == ' ' || ch == 9) ch = getchar();
 #ifdef LARGE
         previous = label;
@@ -349,11 +441,12 @@ void load()
         labels[count] = label;
         offsets[count] = used;
         while (ch != 13 && ch != 10) {
-            if (used >= SPACE-1) { error = 6; return; }
-            text[used++] = ch;
+            if (used >= SPACE-1) error = 6;
+            else text[used++] = ch;
             ch = getchar();
         }
-        if (used >= SPACE) { error = 6; return; }
+        if (used >= SPACE) error = 6;
+        if (error) { used = mark; return; }
         text[used++] = 0;
 #endif
         count++;
@@ -367,20 +460,21 @@ int main()
 #else
     puts("BASIC4");
 #endif
-    load();
-    line = 0;
-#ifdef LARGE
-    while (!error && !done && line < used) {
-        pos = line+1;
-        line = pos;
-        while (text[line]) line++;
-        line++;
-#else
-    while (!error && !done && line < count) {
-        pos = offsets[line++];
+    interactive = __rom_in(13);
+    do {
+        error = 0; done = 0;
+        if (interactive) puts("READY (UPPERCASE)");
+        load();
+#ifndef LARGE
+        if (quitting) return 0;
+        if (interactive && !error) clearvars();
 #endif
-        statement();
-    }
-    if (error) printf("?ERROR %u\n", error);
+        line = 0;
+        runprogram();
+        if (error) printf("?ERROR %u\n", error);
+#ifdef LARGE
+        return 0;
+#endif
+    } while (interactive);
     return 0;
 }

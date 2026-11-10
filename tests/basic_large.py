@@ -36,6 +36,8 @@ class Large(unittest.TestCase):
             self.check(text, 'Mixed case: spaces stay3\n')
         self.check('1 LET @(63)=65535\n2 PRINT @(63)+1\nRUN\n','0\n')
 
+        self.check('1 REM \"comment\n2 PRINT \"Mixed words\"\nRUN\n','Mixed words\n')
+
     def test_storage_boundaries(self):
         self.check('1 REM '+'x'*829+'\nRUN\n','')  # header, R, body, NUL = 832
         self.check('1 REM '+'x'*830+'\nRUN\n','?ERROR 6\n')

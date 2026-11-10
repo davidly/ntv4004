@@ -22,11 +22,11 @@ class Basic(unittest.TestCase):
     def setUpClass(cls):
         cls.image = IMAGE
 
-    def execute(self, source, budget=5_000_000, status=0, timeout=30):
+    def execute(self, source, budget=5_000_000, status=0, timeout=30, options=()):
         with tempfile.TemporaryDirectory(prefix='4004 BASIC ') as directory:
             path = Path(directory, 'input.bas')
             path.write_bytes(source.encode('ascii'))
-            result = subprocess.run([str(HOST), f'-n:{budget}', '-l:'+str(path), str(self.image)],
+            result = subprocess.run([str(HOST), *options, f'-n:{budget}', '-l:'+str(path), str(self.image)],
                                     capture_output=True, timeout=timeout)
         self.assertEqual(result.returncode, status, result.stderr)
         return result.stdout.decode('ascii').replace('\r\n', '\n')
@@ -146,6 +146,82 @@ class Basic(unittest.TestCase):
         expected += 'WIN\n'
         self.assertEqual(self.execute(program+'RUN\n'+''.join(f'{g}\n' for g in guesses),
                                       budget=30_000_000), 'BASIC4\n'+expected)
+
+    def console(self, source):
+        return self.execute(source,options=('-c',),budget=20_000_000)
+
+    def test_console_commands(self):
+        output = self.console('PRINT 2+2\nLET A=42\nPRINT A\n'
+            '10 LET A=A+1\n20 PRINT A\n30 END\nLIST\nRUN\nRUN\n'
+            'PRINT A\nNEW\nPRINT A\nLIST\nBYE\n')
+        self.assertTrue(output.startswith('BASIC4\nREADY (UPPERCASE)\n> PRINT 2+2\n4\n'))
+        self.assertIn('> LIST\n10 LET A=A+1\n20 PRINT A\n30 END\n',output)
+        self.assertEqual(output.count('> RUN\n1\nREADY (UPPERCASE)\n'),2)
+        self.assertIn('> PRINT A\n42\n',output)
+        self.assertIn('> PRINT A\n1\n> NEW\n> PRINT A\n0\n> LIST\n> BYE\n',output)
+        self.assertNotIn('?ERROR',output)
+        output = self.console('10 PRINT 123\n20 END\nGOTO 10\nIF 1=1 THEN 10\n'
+                              'IF 0=1 THEN 10\nEND\nPRINT 4\nBYE\n')
+        self.assertEqual(output.count('\n123\n'),2)
+        self.assertIn('> END\n> PRINT 4\n4\n',output)
+        self.assertNotIn('?ERROR',output)
+
+    def test_console_editing_and_input(self):
+        source = 'PRINT 2+9\b2\nLET A=19\x7f2\nPRINT A\nINPUT A\n123\nPRINT A\nBYE\n'
+        output = self.console(source)
+        self.assertIn('> PRINT 2+9\b \b2\n4\n',output)
+        self.assertIn('> LET A=19\b \b2\n> PRINT A\n12\n',output)
+        self.assertIn('> INPUT A\n? 123\n> PRINT A\n123\n',output)
+        self.assertEqual(self.console(source.replace('\n','\r\n')),output)
+        output = self.console('\b\x7f\x1b\nPRINT\t7\nBYE\n')
+        self.assertIn('> \n> PRINT 7\n7\n',output)
+
+    def test_console_errors_preserve_program(self):
+        output = self.console('10 PRINT "Keep Me"\n20 END\nBOGUS\n'
+            'PRINT 1/0\nPRINT 65536\nPRINT "'+'x'*60+'"\n'
+            '15 PRINT 9\nprint 2\nLIST\nRUN\nBYE\n')
+        self.assertEqual(output.count('?ERROR'),6)
+        self.assertIn('10 PRINT "Keep Me"\n20 END\n> RUN\nKeep Me\n',output)
+        output = self.console('LET A=123\nINPUT A\n12xjunk\nPRINT A\nBYE\n')
+        self.assertEqual(output.count('?ERROR'),1)
+        self.assertIn('> PRINT A\n123\n',output)
+        full = '1 REM '+'x'*379+'\n'
+        output = self.console(full+'2 PRINT 7\nPRINT 5\nLIST\nRUN\nNEW\n1 PRINT 6\nRUN\nBYE\n')
+        self.assertEqual(output.count('?ERROR'),1)
+        self.assertIn('?ERROR 6\n',output)
+        self.assertIn('> PRINT 5\n5\n> LIST\n'+full,output)
+        self.assertIn('> RUN\n6\n',output)
+        lines = ''.join(f'{n} REM\n' for n in range(1,33))
+        output = self.console(lines+'33 END\nLIST\nNEW\n1 END\nRUN\nBYE\n')
+        self.assertEqual(output.count('?ERROR'),1)
+        self.assertIn('?ERROR 5\n',output)
+        self.assertIn('> LIST\n'+lines,output)
+
+    @unittest.skipIf(os.name == 'nt','needs POSIX PTY; forced-console tests cover Windows')
+    def test_console_real_terminal(self):
+        import pty, select, termios, time
+        master, slave = pty.openpty()
+        original = termios.tcgetattr(slave)
+        process = subprocess.Popen([str(HOST),str(IMAGE)],stdin=slave,stdout=slave,stderr=subprocess.PIPE)
+        output = bytearray()
+        def until(needle):
+            deadline = time.monotonic()+10
+            while needle not in output:
+                self.assertLess(time.monotonic(),deadline,bytes(output))
+                ready,_,_ = select.select([master],[],[],0.1)
+                if ready: output.extend(os.read(master,4096))
+        try:
+            until(b'> ')
+            os.write(master,b'PRINT 2+9\x7f2\r')
+            until(b'4\r\n> ')
+            os.write(master,b'BYE\r')
+            self.assertEqual(process.wait(timeout=10),0)
+            self.assertEqual(termios.tcgetattr(slave),original)
+            self.assertIn(b'PRINT 2+9\b \b2',output)
+        finally:
+            if process.poll() is None: process.kill();process.wait()
+            process.stderr.close()
+            os.close(master);os.close(slave)
 
     def test_precedence_and_unsigned_wrap(self):
         for expression, expected in (('2+3*4', 14), ('20/3/2', 3), ('9-3-2', 4),

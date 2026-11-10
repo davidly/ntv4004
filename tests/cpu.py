@@ -423,6 +423,15 @@ class Console(unittest.TestCase):
                                  for line in lines)
                     self.assertEqual(values,[int(winner),5,10,6,7,8,9,11,12,11])
 
+    def test_line_console_opt_in(self):
+        source = ('        FIM 0,0D0H\n        SRC 0\n        RDR\n        XCH 2\n'
+                  '        FIM 0,0F0H\n        SRC 0\n        LDM 3\n        WRR\n'
+                  '        LD 2\n        WRR\n'+end())
+        for options, expected in (((),b'0'),(('-c',),b'1')):
+            with self.subTest(options=options):
+                _, output, code = run(source,options=options)
+                self.assertEqual((code,output),(0,expected))
+
     def test_checked_in_examples_match_their_source(self):
         for path in sorted((ROOT / 'examples').glob('*.asm')):
             with self.subTest(example=path.name):
