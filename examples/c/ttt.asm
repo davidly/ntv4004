@@ -504,7 +504,7 @@ L0029:
         LD 0BH
         SUB 7
         JCN 0AH,$+4
-        JUN L0030
+        JUN L0027
 ; VALUE = SCORE;
         FIM 0,0B0H
         JMS QSTA
@@ -530,7 +530,7 @@ L0031:
         LD 0BH
         SUB 7
         JCN 0AH,$+4
-        JUN L0032
+        JUN L0027
 ; ALPHA = VALUE;
         FIM 0,0B0H
         JMS QLDA
@@ -595,7 +595,6 @@ L0036:
 L0034:
 L0027:
 L0025:
-L0023:
         FIM 0,0A0H
         JMS QINCV
 L0022:
@@ -604,7 +603,6 @@ L0022:
         JMS QSLT
         JCN 4,$+4
         JUN L0021
-L0024:
 ; RETURN VALUE;
         FIM 0,0B0H
         JMS QLDA
@@ -626,7 +624,6 @@ L0037:
         FIM 8,0
         FIM 0AH,0
         JMS QSTIN
-L0039:
         FIM 0,0E0H
         JMS QINCV
 L0038:
@@ -634,7 +631,6 @@ L0038:
         FIM 0AH,9
         JMS QSLT
         JCN 0CH,L0037
-L0040:
 ; G?BOARD( POSITION ) = PIECEX;
         FIM 0,0D0H
         JMS QLDN0
@@ -671,7 +667,6 @@ L0041:
         JMS QSTAC
         JUN MINMA
 L0045:
-L0043:
         FIM 0,0E0H
         JMS QINCV
 L0042:
@@ -679,7 +674,6 @@ L0042:
         JMS QLDB
         JMS QSLT
         JCN 0CH,L0041
-L0044:
 ; RETURN G?IMOVES;
         FIM 0,020H
         JMS QLDA

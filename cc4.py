@@ -1413,6 +1413,36 @@ QNE:    CLC
         JCN 0CH,QNT
         BBL 0
 QNT:    BBL 1''')
+runtime('QEQ8', '''
+; A == B IN THEIR LOW BYTES, RETURNING 1 OR 0: --SIZE'S NARROW EQUALITY.
+QEQ8:   CLC
+        LD 7
+        SUB 11
+        JCN 0CH,QE8F
+        CLC
+        LD 6
+        SUB 10
+        JCN 0CH,QE8F
+        BBL 1
+QE8F:   BBL 0''')
+runtime('QGE8', '''
+; THE CARRY IS 1 IF A >= B, COMPARING LOW BYTES.
+QGE8:   CLC
+        LD 7
+        SUB 11
+        CMC
+        LD 6
+        SUB 10
+        BBL 0''')
+runtime('QLE8', '''
+; THE CARRY IS 1 IF A <= B, COMPARING LOW BYTES.
+QLE8:   CLC
+        LD 11
+        SUB 7
+        CMC
+        LD 10
+        SUB 6
+        BBL 0''')
 runtime('QTST QNOTZ', '''
 ; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
 QTST:   LD 4
@@ -2206,6 +2236,11 @@ QLDR:   LD 1
         BBL 0'''
 DISPATCH_FIXED = 4 + 8
 TWO_BYTES = {'FIM', 'JCN', 'JUN', 'JMS', 'ISZ'}
+# Instructions --size may move into a shared stub: none jumps, returns or
+# depends on its page.
+STRAIGHT_LINE = {'JMS', 'FIM', 'LD', 'LDM', 'XCH', 'CLC', 'CMC', 'STC', 'ADD', 'SUB', 'IAC', 'DAC', 'RAL', 'RAR',
+                 'TCC', 'CMA', 'DAA', 'KBP', 'TCS', 'INC', 'SRC', 'WRM', 'WMP', 'WRR', 'WR0', 'WR1', 'WR2', 'WR3',
+                 'RDM', 'RDR', 'RD0', 'RD1', 'RD2', 'RD3', 'SBM', 'ADM', 'DCL', 'NOP'}
 
 
 def block_size(text):
@@ -2225,6 +2260,53 @@ def block_size(text):
 
 
 STRING_LOOP_SIZE = block_size(STRING_LOOP.format(n=1))
+
+
+def helper_levels():
+    """Return-stack levels a JMS to each runtime entry uses, its own included.
+
+    Follows each entry's code through fallthrough, branches and tail jumps,
+    counting the deepest chain of calls, so --size can tell how deep an
+    outlined stub may call.
+    """
+    code, at = [], {}
+    for block in {id(b): b for b in RUNTIME.values()}.values():
+        for line in block['text'].splitlines():
+            field = asm4.code_field(line).strip()
+            if ':' in field:
+                label, field = field.split(':', 1)
+                at[label.strip()] = len(code)
+                field = field.strip()
+            if field:
+                mnemonic, _, operands = field.partition(' ')
+                code.append((mnemonic, [o.strip() for o in operands.split(',')]))
+        code.append(('END', []))  # blocks don't fall into each other
+    levels = {}
+
+    def level(entry, active=()):
+        if entry not in levels:
+            if entry in active or entry not in at:
+                return 1
+            calls, seen, work = set(), set(), [at[entry]]
+            while work:
+                i = work.pop()
+                if i in seen:
+                    continue
+                seen.add(i)
+                mnemonic, operands = code[i]
+                if mnemonic == 'JMS':
+                    calls.add(operands[0])
+                if mnemonic in ('JUN', 'JCN', 'ISZ') and operands[-1] in at:
+                    work.append(at[operands[-1]])
+                if mnemonic not in ('JUN', 'BBL', 'JIN', 'END'):
+                    work.append(i + 1)
+            levels[entry] = 1 + max([0] + [level(c, active + (entry,)) for c in calls])
+        return levels[entry]
+    return {entry: level(entry) for entry in RUNTIME}
+
+
+HELPER_LEVELS = helper_levels()
+STACK_LEVELS = 3  # the 4004's return stack; compiled code runs at level 0
 
 
 # ---------------------------------------------------------------- code generation
@@ -2255,7 +2337,8 @@ HARDWARE = {'__rom_out': 2, '__rom_in': 1, '__ram_out': 3, '__test': 0, '__kbp':
             '__ei': 0, '__di': 0, '__halt': 0}  # built-ins: argument counts
 INSTRUCTIONS_4040 = {'__ei': 'EIN', '__di': 'DIN', '__halt': 'HLT'}
 # Helpers that leave A unchanged, so it still holds the variable last loaded or stored.
-KEEPS_A = {'QLDB', 'QLDBI', 'QLDBC', 'QSTA', 'QTST', 'QTEST', 'QNOTZ', 'QODD', 'QEQ', 'QNE', 'QPUTC', 'QSAVE', 'QRSTR'}
+KEEPS_A = {'QLDB', 'QLDBI', 'QLDBC', 'QSTA', 'QTST', 'QTEST', 'QNOTZ', 'QODD', 'QEQ', 'QNE', 'QPUTC', 'QSAVE', 'QRSTR',
+           'QEQ8', 'QGE8', 'QLE8'}
 ACCUMULATOR_ONLY = {'LD', 'LDM', 'CLC', 'CMC', 'STC', 'ADD', 'SUB', 'RAL', 'RAR', 'TCC', 'CMA', 'IAC', 'DAC',
                     'EIN', 'DIN', 'HLT'}
 MIRROR = {'<': '>', '>': '<', '<=': '>=', '>=': '<=', '==': '==', '!=': '!='}
@@ -2278,6 +2361,7 @@ class Compiler:
         self.strings = {}  # data -> (label, block number)
         self.string_blocks = []  # [free bytes, [(label, data)]]
         self.shared_accesses = []
+        self.stub_levels = {}  # shared code's return-stack levels, as HELPER_LEVELS
         self.return_sites = []
         self.loops = []
         self.code = []
@@ -2303,9 +2387,10 @@ class Compiler:
         self.code, self.a_holds, self.incoming, self.falls = [], None, {}, True
         self.startup()
         self.code += body
-        self.code = self.shrink_code(self.code)
+        self.code = self.shrink_code(self.code, keep=set(self.return_sites))
         if self.size:
             self.code = self.share_accesses(self.code)
+            self.code = self.outline(self.code)
         return self.output()
 
     # analysis and allocation
@@ -2951,6 +3036,12 @@ class Compiler:
             self.op('SUB', y)
             self.jcn(2 if (op in ('>=', '<=')) == when else 0xA, label)
             return
+        if self.size:  # a helper call is smaller than comparing the two nibbles in place
+            if op in ('==', '!='):
+                self.call('QEQ8')
+                return self.jcn(0xC if (op == '==') == when else 4, label)
+            self.call('QGE8' if op in ('>=', '<') else 'QLE8')
+            return self.jcn(2 if (op in ('>=', '<=')) == when else 0xA, label)
         if op in ('==', '!='):
             if (op == '==') == when:  # jump if equal
                 skip = self.label()
@@ -3444,6 +3535,7 @@ class Compiler:
                 shared[pair] = label
                 value, helper = pair
                 self.shared_accesses.append(f'{label}: FIM 0,{number(value)}\n        JUN {helper}')
+                self.stub_levels[label] = HELPER_LEVELS[helper]
         output = [];i = 0
         while i < len(items):
             pair = key(i)
@@ -3454,14 +3546,115 @@ class Compiler:
                 output.append(items[i]);i += 1
         return output
 
-    @staticmethod
-    def shrink_code(items):
-        """Remove unreachable instructions and transfers to immediate fallthrough.
+    def outline(self, items):
+        """Outline repeated straight-line code that ends in a helper call.
 
-        Labels remain entry points: software-call continuations are reached
-        indirectly through the runtime return table, not a visible C jump.
+        Each stub ends by jumping to the helper, which returns for it. Greedily
+        takes the sequence that saves the most bytes, while the deepest call in
+        the stub stays within the return stack. Each use saves its length less
+        two bytes, at the cost of a JMS and a BBL.
+        """
+        texts = {}
+
+        def text(item):
+            if item not in texts:
+                operands = ','.join(o if isinstance(o, str) else number(o.address() if isinstance(o, Slot) else o)
+                                    for o in item[2])
+                texts[item] = f'{item[1]} {operands}'.rstrip()
+            return texts[item]
+
+        def levels(item):
+            return (HELPER_LEVELS.get(item[2][0]) or self.stub_levels.get(item[2][0])) if item[1] == 'JMS' else None
+
+        while True:
+            ops = [i for i, item in enumerate(items) if item[0] != 'comment']
+            runs, best = {}, None
+            for k, start in enumerate(ops):
+                deepest, key, size = 0, (), 0
+                for end in ops[k:k + 12]:
+                    item = items[end]
+                    if item[0] != 'op' or item[1] not in STRAIGHT_LINE:
+                        break
+                    called = levels(item)
+                    if item[1] == 'JMS' and called is None:
+                        break
+                    key += (text(item),)
+                    size += 2 if item[1] in TWO_BYTES else 1
+                    if called is not None and end != start and max(deepest, called) <= STACK_LEVELS:
+                        runs.setdefault(key, (size, []))[1].append((start, end, max(deepest, called)))
+                    if called is not None:
+                        deepest = max(deepest, 1 + called)
+                        if deepest > STACK_LEVELS:
+                            break
+            for key, (size, places) in runs.items():
+                if len(places) * (size - 2) - size < (best[0] if best else 1):
+                    continue  # it can't win, even with every use
+                chosen, after = [], -1
+                for start, end, depth in places:
+                    if start > after:
+                        chosen.append((start, end))
+                        after = end
+                saving = len(chosen) * (size - 2) - size
+                if saving > 0 and (best is None or (saving, size) > best[:2]):
+                    best = (saving, size, key, chosen, places[0][2])
+            if best is None:
+                return items
+            _, _, key, chosen, depth = best
+            label = f'QV{len(self.stub_levels) + 1:03d}'
+            self.stub_levels[label] = depth
+            body = [f'{label}:  {key[0]}'] + [f'        {line}' for line in key[1:]]
+            body[-1] = body[-1].replace('JMS ', 'JUN ', 1)
+            self.shared_accesses.append('\n'.join(body))
+            starts = {start: end for start, end in chosen}
+            output, i = [], 0
+            while i < len(items):
+                if i in starts:
+                    output.append(('op', 'JMS', (label,)))
+                    i = starts[i] + 1
+                else:
+                    output.append(items[i])
+                    i += 1
+            items = output
+
+    @staticmethod
+    def jump_targets(items):
+        """Each label whose code is just a JUN, and the label that jump chain ends at."""
+        jumps = {}
+        for i, item in enumerate(items):
+            if item[0] == 'label':
+                j = i + 1
+                while j < len(items) and items[j][0] in ('label', 'comment'):
+                    j += 1
+                if j < len(items) and items[j][:2] == ('op', 'JUN'):
+                    jumps[item[1]] = items[j][2][0]
+        final = {}
+        for label in jumps:
+            target, seen = label, set()
+            while target in jumps and target not in seen:  # a jump to itself ends a chain too
+                seen.add(target)
+                target = jumps[target]
+            if target != label:
+                final[label] = target
+        return final
+
+    @classmethod
+    def shrink_code(cls, items, keep=()):
+        """Remove unreachable instructions and transfers to immediate fallthrough,
+        and send each JUN straight to the end of any chain of jumps.
+
+        Labels remain entry points: software-call continuations (keep) are
+        reached indirectly through the runtime return table, not a visible C
+        jump. Other compiler labels nothing refers to any more are dropped, so
+        a jump that only they reached becomes unreachable.
         """
         while True:
+            final = cls.jump_targets(items)
+            items = [('op', 'JUN', (final.get(item[2][0], item[2][0]),)) if item[:2] == ('op', 'JUN') else item
+                     for item in items]
+            referenced = set(keep) | {item[2] for item in items if item[0] == 'jcn'} | {
+                o for item in items if item[0] == 'op' for o in item[2] if isinstance(o, str)}
+            items = [item for item in items
+                     if not (item[0] == 'label' and re.fullmatch(r'L\d{4}', item[1]) and item[1] not in referenced)]
             result = []
             reachable = True
             for item in items:
@@ -3490,7 +3683,12 @@ class Compiler:
             items = output
 
     def layout(self, items):
-        """Place compiled code from 0, choosing a short or long form for each JCN."""
+        """Place compiled code from 0, choosing a short or long form for each JCN.
+
+        A JCN to a label that only jumps on goes to the jump's target instead,
+        when that keeps it short; self.jcn_targets records each JCN's target.
+        """
+        final = self.jump_targets(items)
         long = set()
         while True:
             address, labels, places, pads = 0, {}, {}, {}
@@ -3509,8 +3707,14 @@ class Compiler:
                         places[i] = address
                         address += 2
             grew = False
+            self.jcn_targets = {}
             for i, address_of in places.items():
-                if i not in long and labels[items[i][2]] >> 8 != (address_of + 2) >> 8:
+                label = items[i][2]
+                page = (address_of + 2) >> 8
+                choices = [final[label], label] if label in final else [label]
+                near = [c for c in choices if labels[c] >> 8 == page]
+                self.jcn_targets[i] = near[0] if near else choices[0]
+                if i not in long and not near:
                     long.add(i)
                     grew = True
             if not grew:
@@ -3530,7 +3734,7 @@ class Compiler:
                                     for o in item[2])
                 lines.append(f'        {item[1]} {operands}'.rstrip())
             else:
-                condition, target = item[1], item[2]
+                condition, target = item[1], self.jcn_targets[i]
                 if i in long:
                     lines += ['        NOP'] * pads[i]
                     lines.append(f'        JCN {number(condition ^ 8)},$+4')
@@ -3648,7 +3852,7 @@ def main():
     parser.add_argument('-S', dest='assembly_only', action='store_true', help='write only the MAC4 source')
     parser.add_argument('--4040', dest='cpu', action='store_const', const='4040', default='4004',
                         help='compile for the 4040: interrupts, __ei, __di and __halt')
-    parser.add_argument('--size', action='store_true', help='share repeated runtime access sequences to reduce ROM at a small cycle cost')
+    parser.add_argument('--size', action='store_true', help='compare bytes through helpers and outline repeated code, reducing ROM at a small cycle cost')
     parser.add_argument('--stats', action='store_true', help='report ROM and RAM use')
     args = parser.parse_args()
     try:

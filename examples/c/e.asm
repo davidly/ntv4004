@@ -34,7 +34,6 @@ L0001:
         FIM 8,0
         FIM 0AH,1
         JMS QSTI
-L0003:
         FIM 0,040H
         JMS QDECV
 L0002:
@@ -42,7 +41,6 @@ L0002:
         FIM 0AH,0
         JMS QSGT
         JCN 0CH,L0001
-L0004:
 ; A(1) = 2, A(0) = 0;
         FIM 4,0
         FIM 6,4
@@ -114,18 +112,15 @@ L0009:
         JMS QADD
         FIM 0,030H
         JMS QSTA
-L0011:
 L0010:
         FIM 0,040H
         JMS QDECV
         JMS QTST
         JCN 0CH,L0009
-L0012:
 ; PRINTF("%D", X);
         FIM 0,030H
         JMS QLDA
         JMS QPRTD
-L0007:
 L0006:
         FIM 0,020H
         JMS QLDA
@@ -133,7 +128,6 @@ L0006:
         FIM 0AH,9
         JMS QSGT
         JCN 0CH,L0005
-L0008:
 ; PRINTF( "?NDONE?N" );
         FIM 0,S0001 AND 0FFH
         JMS QS1

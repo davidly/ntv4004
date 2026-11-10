@@ -232,7 +232,6 @@ L0009:
         FIM 8,0
         FIM 0AH,0
         JMS QSBIT
-L0011:
         FIM 0,0D0H
         JMS QINCC
 L0010:
@@ -244,7 +243,6 @@ L0010:
         LD 6
         SUB 0AH
         JCN 0AH,L0009
-L0012:
 ; VISITED(0) = 1;
         FIM 4,0
         FIM 6,064H
@@ -467,7 +465,6 @@ L0024:
         JMS QAND
         FIM 0,0B0H
         JMS QSTAC
-L0021:
         FIM 0,0C0H
         JMS QINCC
 L0020:
@@ -506,8 +503,6 @@ L0028:
         FIM 0,080H
         JMS QDECC
 L0027:
-L0015:
-L0014:
         JUN L0013
 L0016:
 ; IF (!GENERATING)
@@ -536,7 +531,6 @@ L0030:
         FIM 8,0
         FIM 0AH,1
         JMS QSBIT
-L0032:
         FIM 0,0D0H
         JMS QINCC
 L0031:
@@ -549,7 +543,6 @@ L0031:
         LD 0AH
         SUB 6
         JCN 2,L0030
-L0033:
 L0029:
         FIM 0,060H
         JUN QRETF
@@ -627,7 +620,6 @@ L0044:
         FIM 6,023H
 L0045:
         JMS QPUTC
-L0040:
         FIM 0,021H
         JMS QINCC
 L0039:
@@ -639,7 +631,6 @@ L0039:
         LD 6
         SUB 0AH
         JCN 0AH,L0038
-L0041:
 ; PUTCHAR('?N');
         FIM 4,0
         FIM 6,0AH
@@ -700,7 +691,6 @@ L0052:
         FIM 4,0
         FIM 6,023H
         JMS QPUTC
-L0049:
         FIM 0,021H
         JMS QINCC
 L0048:
@@ -713,13 +703,11 @@ L0048:
         SUB 0AH
         JCN 2,$+4
         JUN L0047
-L0050:
 ; PUTCHAR('?N');
         FIM 4,0
         FIM 6,0AH
         JMS QPUTC
 L0046:
-L0036:
         FIM 0,011H
         JMS QINCC
 L0035:
@@ -732,7 +720,6 @@ L0035:
         SUB 0AH
         JCN 2,$+4
         JUN L0034
-L0037:
 ; PUTS("######### #");
         FIM 0,S0004 AND 0FFH
         JMS QS1

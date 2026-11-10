@@ -45,9 +45,16 @@ class Basic(unittest.TestCase):
         self.assertLessEqual(compiler.memory_top, 2048)
         self.assertLessEqual(compiler.slots_used, 128)
         self.assertTrue(compiler.shared_accesses)
+        # Each shared stub ends by jumping to a helper, and its deepest call fits
+        # the 4004's three-level return stack above the compiled code.
+        levels = dict(cc4.HELPER_LEVELS)
         for stub in compiler.shared_accesses:
-            self.assertNotIn('JMS', stub)
-            self.assertIn('JUN Q', stub)
+            lines = [line.split(':')[-1].split() for line in stub.splitlines()]
+            label = stub.split(':')[0]
+            self.assertEqual(lines[-1][0], 'JUN', stub)
+            calls = [levels[op[1]] + 1 for op in lines[:-1] if op[0] == 'JMS']
+            levels[label] = max(calls + [levels[lines[-1][1]]])
+            self.assertLessEqual(levels[label], 3, stub)
 
     def test_segmented_sieve(self):
         source = (ROOT/'basic/examples/sieve.bas').read_text()

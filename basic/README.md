@@ -133,8 +133,9 @@ python3 tests/basic_large.py
 
 The checked-in `.asm`, `.hex` and `.map` are reproducible outputs of `cc4.py`
 with **`--size` required**. The expanded interpreter is too large in the normal
-speed-oriented profile. It occupies 4,012 stored bytes and ends at ROM byte 4,015
-of 4,096, including placement gaps. Its arrays use 1,928 of 2,048 main RAM nibbles
+speed-oriented profile, needing 4,305 bytes. With `--size` it occupies 3,219
+stored bytes and ends at ROM byte 3,224 of 4,096, including placement gaps,
+leaving 872 bytes free; the larger-program profile ends at byte 3,208. Its arrays use 1,928 of 2,048 main RAM nibbles
 (964 bytes); scalars use 56 of 128 status registers. There is no parser recursion
 or dynamically allocated array. Both the original 4004 ROM and RAM limits hold.
 
@@ -171,8 +172,8 @@ total matches by consuming those counts, and subtracts exact matches to obtain
 misplaced matches. The secret integer in line 6 and the frequencies in lines
 2–4 must agree if you change the secret.
 
-The supplied three-guess game takes **1,417,296 instruction cycles**, about
-**15.32 seconds** at 740 kHz, excluding I/O waits. Interactive time depends on
+The supplied three-guess game takes **1,505,317 instruction cycles**, about
+**16.27 seconds** at 740 kHz, excluding I/O waits. Interactive time depends on
 your guesses and typing. Tests also verify the game in Intel's INTERP/4.
 
 ## e benchmark
@@ -184,8 +185,8 @@ value is 27; subsequent output values are single digits, joined using `PRINT X;`
 The BASIC program uses 20 lines and 220 stored bytes, including line terminators.
 
 It prints the `BASIC4` banner, 192 digits, a newline, then `done` and another newline.
-One complete load/run takes **878,684,673 instruction cycles**, about **9,499.29
-seconds (2 hours 38 minutes)** on a 740 kHz 4004, excluding I/O waits. Host
+One complete load/run takes **933,594,623 instruction cycles**, about **10,092.91
+seconds (2 hours 48 minutes)** on a 740 kHz 4004, excluding I/O waits. Host
 emulation is much faster. For a finite emulator budget, allow at least
 `-n:1200000000` cycles. Source is parsed and executed on the emulated CPU; there
 is no host-side BASIC translation or hard-coded e output.
@@ -215,9 +216,9 @@ segment. All odd divisors are considered, including composite divisors whose
 marking is redundant; this avoids storing a separate base-prime table.
 
 This is a segmented variant, so report its timings separately from the original
-unsegmented sieve. A complete ten-pass load/run takes **10,226,103,030 instruction
-cycles**, about **110,552.47 seconds (30 hours 43 minutes)** at 740 kHz, excluding
-I/O waits. Host emulation took about 45 seconds on the development machine.
+unsegmented sieve. A complete ten-pass load/run takes **10,841,654,825 instruction
+cycles**, about **117,207.08 seconds (32 hours 33 minutes)** at 740 kHz, excluding
+I/O waits. Host emulation took about 49 seconds on the development machine.
 If using `-n`, allow `-n:12000000000`. Output is:
 
 ```
@@ -275,9 +276,9 @@ board cells occupy 0–8, frames occupy 16–51, and the eight winning triples o
 56–63. No recursive calls or host-side search are required. The source has 91
 numbered lines and fits the packed source buffer.
 
-A complete native load/run takes **8,380,921,620 instruction cycles**, about
-**90,604.56 seconds (25 hours 10 minutes)** at 740 kHz, excluding I/O waits.
-Host emulation took about 37 seconds on the development machine. The regression
+A complete native load/run takes **8,687,256,898 instruction cycles**, about
+**93,916.29 seconds (26 hours 5 minutes)** at 740 kHz, excluding I/O waits.
+Host emulation took about 38 seconds on the development machine. The regression
 test runs the full search and checks the exact output; it also checks packed
 storage boundaries, CRLF input, branches, scalar `T` versus `THEN`, array bounds,
 and reproducible ROM builds. The standard interpreter remains unchanged in size.

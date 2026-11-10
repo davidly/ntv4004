@@ -304,7 +304,6 @@ L0026:
         FIM 8,0
         FIM 0AH,0
         JMS QSBIT
-L0028:
         FIM 0,0C0H
         JMS QINCV
 L0027:
@@ -312,7 +311,6 @@ L0027:
         FIM 0AH,064H
         JMS QULT
         JCN 0CH,L0026
-L0029:
 ; CURRENT(2*STRIDE+3) = 1;
         FIM 4,0
         FIM 6,047H
@@ -442,7 +440,6 @@ L0030:
         JMS QADD
         FIM 0,030H
         JMS QSTA
-L0032:
         FIM 0,0C0H
         JMS QINCV
 L0031:
@@ -450,7 +447,6 @@ L0031:
         FIM 0AH,064H
         JMS QULT
         JCN 0CH,L0030
-L0033:
         FIM 0,0B0H
         JUN QRETF
 HORIZ:
@@ -470,7 +466,6 @@ L0034:
         FIM 4,0
         FIM 6,02DH
         JMS QPUTC
-L0036:
         FIM 0,0E0H
         JMS QINCC
 L0035:
@@ -482,7 +477,6 @@ L0035:
         LD 6
         SUB 0AH
         JCN 0AH,L0034
-L0037:
 ; PUTCHAR('+');
         FIM 4,0
         FIM 6,02BH
@@ -591,7 +585,6 @@ L0050:
         FIM 0,S0006 AND 0FFH
         JMS QS1
 L0049:
-L0047:
         FIM 0,011H
         JMS QINCC
 L0046:
@@ -603,12 +596,10 @@ L0046:
         LD 6
         SUB 0AH
         JCN 0AH,L0045
-L0048:
 ; PUTCHAR('?');
         FIM 4,0
         FIM 6,07CH
         JMS QPUTC
-L0042:
         FIM 0,1
         JMS QINCC
 L0041:
@@ -621,7 +612,6 @@ L0041:
         SUB 0AH
         JCN 2,$+4
         JUN L0040
-L0043:
 ; CURSOR(HEIGHT+4, 1);
         FIM 4,0
         FIM 6,014H
@@ -856,7 +846,6 @@ L0063:
 ; CELL++;
         FIM 0,051H
         JMS QINCV
-L0060:
         FIM 0,071H
         JMS QINCC
 L0059:
@@ -869,8 +858,6 @@ L0059:
         SUB 0AH
         JCN 2,$+4
         JUN L0058
-L0061:
-L0056:
         FIM 0,061H
         JMS QINCC
 L0055:
@@ -883,7 +870,6 @@ L0055:
         SUB 0AH
         JCN 2,$+4
         JUN L0054
-L0057:
 ; FOR (ROW = 0; ROW < HEIGHT; ROW++) (
         FIM 4,0
         FIM 6,0
@@ -1024,7 +1010,6 @@ L0074:
 ; CELL++;
         FIM 0,051H
         JMS QINCV
-L0072:
         FIM 0,071H
         JMS QINCC
 L0071:
@@ -1037,8 +1022,6 @@ L0071:
         SUB 0AH
         JCN 2,$+4
         JUN L0070
-L0073:
-L0068:
         FIM 0,061H
         JMS QINCC
 L0067:
@@ -1051,7 +1034,6 @@ L0067:
         SUB 0AH
         JCN 2,$+4
         JUN L0066
-L0069:
 ; GENERATION++;
         FIM 0,020H
         JMS QINCV

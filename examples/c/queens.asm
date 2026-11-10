@@ -69,7 +69,6 @@ L0010:
         FIM 6,02EH
 L0011:
         JMS QPUTC
-L0008:
         FIM 0,040H
         JMS QLDN1
         JMS QINC
@@ -81,12 +80,10 @@ L0007:
         LD 7
         SUB 0BH
         JCN 0AH,L0006
-L0009:
 ; PUTCHAR('?N');
         FIM 4,0
         FIM 6,0AH
         JMS QPUTC
-L0004:
         FIM 0,040H
         JMS QLDN0
         JMS QINC
@@ -98,7 +95,6 @@ L0003:
         LD 7
         SUB 0BH
         JCN 0AH,L0002
-L0005:
         FIM 0,030H
         JUN QRETF
 PLACE:
@@ -271,7 +267,6 @@ L0020:
         JMS QLDB
         JMS QSBIT
 L0019:
-L0017:
         FIM 0,060H
         JMS QLDN1
         JMS QINC
@@ -284,7 +279,6 @@ L0016:
         SUB 0BH
         JCN 2,$+4
         JUN L0015
-L0018:
         FIM 0,050H
         JUN QRETF
         ORG 01CBH

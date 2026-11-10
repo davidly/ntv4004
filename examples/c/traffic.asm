@@ -42,15 +42,13 @@ L0006:
         FIM 6,6
         FIM 0,050H
         JMS QSTAC
-        JUN WAIT
+        JUN L0030
 L0010:
-L0008:
 L0007:
         FIM 0,010H
         JMS QLDA
         LD 7
         JCN 4,L0006
-L0009:
 ; PRESSED = 0;
         FIM 4,0
         FIM 6,0
@@ -66,7 +64,7 @@ L0009:
         FIM 6,8
         FIM 0,050H
         JMS QSTAC
-        JUN WAIT
+        JUN L0030
 L0011:
 ; LAMPS(AMBER, DONT?WALK);
         FIM 4,0
@@ -93,7 +91,7 @@ L0012:
         FIM 6,0CH
         FIM 0,050H
         JMS QSTAC
-        JUN WAIT
+        JUN L0030
 L0013:
 ; LAMPS(RED, DONT?WALK);
         FIM 4,0
@@ -117,7 +115,7 @@ L0014:
         FIM 6,010H
         FIM 0,050H
         JMS QSTAC
-        JUN WAIT
+        JUN L0030
 L0015:
 ; LAMPS(RED, WALK);
         FIM 4,0
@@ -144,7 +142,7 @@ L0016:
         FIM 6,014H
         FIM 0,050H
         JMS QSTAC
-        JUN WAIT
+        JUN L0030
 L0017:
 ; FOR (FLASH = 0; FLASH < 4; FLASH++) (   /* THE WALK LAMP FLASHES */
         FIM 4,0
@@ -175,7 +173,7 @@ L0022:
         FIM 6,018H
         FIM 0,050H
         JMS QSTAC
-        JUN WAIT
+        JUN L0030
 L0023:
 ; LAMPS(RED, WALK);
         FIM 4,0
@@ -199,9 +197,8 @@ L0024:
         FIM 6,01CH
         FIM 0,050H
         JMS QSTAC
-        JUN WAIT
+        JUN L0030
 L0025:
-L0020:
         FIM 0,040H
         JMS QINCV
 L0019:
@@ -210,7 +207,6 @@ L0019:
         JMS QSLT
         JCN 4,$+4
         JUN L0018
-L0021:
 ; LAMPS(RED, DONT?WALK);
         FIM 4,0
         FIM 6,4
@@ -233,7 +229,7 @@ L0026:
         FIM 6,020H
         FIM 0,050H
         JMS QSTAC
-        JUN WAIT
+        JUN L0030
 L0027:
 ; LAMPS(GREEN, DONT?WALK);
         FIM 4,0
@@ -252,7 +248,6 @@ L0028:
 ; PUTS("ROAD GREEN");
         FIM 0,S0004 AND 0FFH
         JMS QS1
-L0004:
         FIM 0,030H
         JMS QINCV
 L0003:
@@ -260,8 +255,7 @@ L0003:
         FIM 0AH,2
         JMS QSLT
         JCN 4,$+4
-        JUN L0002
-L0005:
+        JUN L0007
 ; RETURN 0;
         FIM 4,0
         FIM 6,0
@@ -306,7 +300,6 @@ L0033:
         FIM 0,010H
         JMS QSTAC
 L0037:
-L0035:
         FIM 0,070H
         JMS QINCV
 L0034:
@@ -314,8 +307,6 @@ L0034:
         FIM 0AH,056H
         JMS QSLT
         JCN 0CH,L0033
-L0036:
-L0031:
 L0030:
         FIM 0,060H
         JMS QLDA
@@ -327,7 +318,6 @@ L0030:
         JMS QLDA
         JMS QTST
         JCN 0CH,L0029
-L0032:
         FIM 0,050H
         JUN QRETF
 F0003:

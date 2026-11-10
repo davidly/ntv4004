@@ -126,9 +126,9 @@ waits; these are instruction cycles, each taking eight clock periods.
 
 | BASIC benchmark | Workload | Interpreter ROM | Instruction cycles | 740 kHz 4004 |
 | --- | --- | --- | ---: | ---: |
-| [sieve](basic/examples/sieve.bas) | Ten segmented passes; 1899 odd primes from 3 through 16383 | `basic.hex` | 10,226,103,030 | 110,552.47 s (30 h 43 min) |
-| [e](basic/examples/e.bas) | 192 digits using the factorial-series spigot | `basic.hex` | 878,684,673 | 9,499.29 s (2 h 38 min) |
-| [ttt](basic/examples/ttt.bas) | One iteration over three distinct openings; 6493 moves | `large.hex` | 8,380,921,620 | 90,604.56 s (25 h 10 min) |
+| [sieve](basic/examples/sieve.bas) | Ten segmented passes; 1899 odd primes from 3 through 16383 | `basic.hex` | 10,841,654,825 | 117,207.08 s (32 h 33 min) |
+| [e](basic/examples/e.bas) | 192 digits using the factorial-series spigot | `basic.hex` | 933,594,623 | 10,092.91 s (2 h 48 min) |
+| [ttt](basic/examples/ttt.bas) | One iteration over three distinct openings; 6493 moves | `large.hex` | 8,687,256,898 | 93,916.29 s (26 h 5 min) |
 
 The BASIC sieve uses segmentation to fit its 200-element array, so its timing
 should be reported separately from the unsegmented assembly and C versions.
@@ -246,7 +246,7 @@ and `char` elsewhere:
 | [hello](examples/c/hello.c) | 90 bytes | 1,773 | 0.02 s | |
 | [e](examples/c/e.c) | 812 bytes | 29,482,644 | 319 s | 8.5 times as long |
 | [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s | 9.7 times |
-| [ttt](examples/c/ttt.c) | 1,688 bytes | 11,958,168 | 129 s | 11.7 times |
+| [ttt](examples/c/ttt.c) | 1,688 bytes | 11,955,484 | 129 s | 11.7 times |
 | [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s | |
 | [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s | |
 | [maze](examples/c/maze.c) | 1,944 bytes | 460,917 | 4.98 s | |
@@ -346,22 +346,34 @@ Intel's INTERP/4 without adding a long simulation to the test suite.
 ### Smaller ROMs
 
 All builds remove unreachable instructions after unconditional jumps and jumps
-whose target is the next instruction. Labels remain entry points, including
-indirect software-call continuations and the 4040's fixed interrupt vector.
+whose target is the next instruction. They also thread jumps: a jump to a label
+whose code only jumps on goes straight to the final target, and so does a
+conditional jump when that keeps it on its page. Labels remain entry points,
+including indirect software-call continuations and the 4040's fixed interrupt
+vector; other compiler labels nothing refers to are dropped.
 The regenerated examples above use this default mode.
 
-`--size` additionally shares repeated `FIM 0,address` / `JMS helper` pairs through
-small ROM stubs. A stub tail-jumps to the original helper, so it adds no hardware
-stack level, changes no RAM allocation, and adds two instruction cycles per use.
-Only pairs used at least three times qualify. It trades some runtime for ROM:
+`--size` makes three further changes, trading some runtime for ROM:
+
+* Comparisons of two bytes call `QEQ8`, `QGE8` or `QLE8` instead of comparing
+  both nibbles in place: four bytes instead of eight or ten.
+* Repeated `FIM 0,address` / `JMS helper` pairs, used at least three times,
+  share a small stub that tail-jumps to the helper.
+* Any other repeated run of straight-line code ending in a helper call is
+  outlined the same way, taking first the run that saves the most bytes. A
+  stub may call other helpers before its tail jump, but only while its
+  deepest call still fits the 4004's three-level return stack above the
+  compiled code; `tests/basic.py` checks each stub's depth independently.
+
+None of these changes RAM allocation. Each shared use adds a JMS and a BBL:
 
 | Program | Default ROM | `--size` ROM | ROM reduction | Extra cycles |
 | --- | ---: | ---: | ---: | ---: |
-| C TTT | 1,688 | 1,613 | 4.4% | 1.5% |
-| C queens | 1,146 | 1,110 | 3.1% | 3.4% |
-| C hanoi | 979 | 960 | 1.9% | 2.5% |
-| C e | 812 | 801 | 1.4% | 0.9% |
-| C sieve | 616 | 608 | 1.3% | 0.7% |
+| C TTT | 1,688 | 1,557 | 7.8% | 4.5% |
+| C queens | 1,146 | 1,052 | 8.2% | 3.9% |
+| C hanoi | 979 | 902 | 7.9% | 4.4% |
+| C e | 812 | 796 | 2.0% | 1.5% |
+| C sieve | 616 | 592 | 3.9% | 2.6% |
 
 ROM footprint is the highest occupied byte plus one, including runtime, data
 and placement gaps. Moving code can change short/long conditional-branch

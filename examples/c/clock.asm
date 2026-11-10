@@ -77,7 +77,6 @@ L0001:
         FIM 6,0AH
         JMS QPUTC
 L0005:
-L0003:
 L0002:
         FIM 0,080H
         JMS QLDA
@@ -85,7 +84,6 @@ L0002:
         FIM 0AH,0AH
         JMS QSLT
         JCN 0CH,L0001
-L0004:
 ; ??DI();
         DIN
 ; PUTS("DONE");

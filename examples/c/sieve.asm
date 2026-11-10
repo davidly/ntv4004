@@ -33,7 +33,6 @@ L0005:
         FIM 8,0
         FIM 0AH,1
         JMS QSBIT
-L0007:
         FIM 0,020H
         JMS QINCV
 L0006:
@@ -41,7 +40,6 @@ L0006:
         FIM 0AH,0FEH
         JMS QSLE
         JCN 0CH,L0005
-L0008:
 ; FOR (I = 0; I <= SIZE; I++) (
         FIM 4,0
         FIM 6,0
@@ -81,7 +79,6 @@ L0014:
         FIM 8,0
         FIM 0AH,0
         JMS QSBIT
-L0016:
         FIM 0,030H
         JMS QLDA
         FIM 0,040H
@@ -94,12 +91,10 @@ L0015:
         FIM 0AH,0FEH
         JMS QSLE
         JCN 0CH,L0014
-L0017:
 ; COUNT++;                /* PRIMES FOUND */
         FIM 0,050H
         JMS QINCV
 L0013:
-L0011:
         FIM 0,020H
         JMS QINCV
 L0010:
@@ -107,8 +102,6 @@ L0010:
         FIM 0AH,0FEH
         JMS QSLE
         JCN 0CH,L0009
-L0012:
-L0003:
         FIM 0,060H
         JMS QINCV
 L0002:
@@ -116,7 +109,6 @@ L0002:
         FIM 0AH,0AH
         JMS QSLE
         JCN 0CH,L0001
-L0004:
 ; PRINTF("%D PRIMES.?N",COUNT);           /*PRIMES FOUND IN 10TH PASS */
         FIM 0,050H
         JMS QLDA
