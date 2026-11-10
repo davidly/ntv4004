@@ -6,14 +6,17 @@
 ; DEPTH D IN THE STATUS CHARACTERS OF 4002 RAM REGISTER D: 0 THE MOVE
 ; BEING TRIED, 1 THE VALUE, 2 ALPHA, 3 BETA. EVEN DEPTHS MINIMIZE (O TO
 ; MOVE), ODD DEPTHS MAXIMIZE (X TO MOVE).
-; RAM REGISTER 15 IS THE BOARD: 0 BLANK, 1 X, 2 O, WITH A BLANK CELL 9
-; THAT ENDS THE SEARCH FOR MOVES. THE NODE COUNT IS BINARY: LOW NIBBLES
+; RAM REGISTER 15 IS THE BOARD: 0 BLANK, 1 O, 2 X, CELL N IN CHARACTER
+; 7+N, SO THAT ISZ ENDS THE SEARCH FOR MOVES AFTER CELL 8, CHARACTER 15,
+; WITHOUT A COMPARISON. THE NODE COUNT IS BINARY: LOW NIBBLES
 ; IN R15 AND R7, HIGH NIBBLES IN RAM REGISTER 14'S STATUS 2 AND 3.
 ; R7 CAN HOLD A COUNT DIGIT BECAUSE SRC 6'S LOW NIBBLE DOES NOT AFFECT
 ; WHICH STATUS REGISTER RD0-RD3/WR0-WR3 ADDRESS.
-; R4R5 SELECTS BOARD CELL R5 (R4 = 15)   R6R7 SELECTS FRAME R6 = D
-; R8 THE MOVE   R9 THE VALUE   R10 ALPHA   R11 BETA   R12 A SCORE
-; R13 THE FIRST MOVE'S NUMBER   R0-R3 AND R14 ARE WORK REGISTERS.
+; R4R5 SELECTS BOARD CHARACTER R5 (R4 = 15), SO R5 IS ALSO THE MOVE
+; BEING TRIED   R6R7 SELECTS FRAME R6 = D
+; R9 THE VALUE   R10 ALPHA   R11 BETA   R12 A SCORE
+; R13 THE FIRST MOVE'S NUMBER   R14 THE LAST PIECE PLACED
+; R0-R3 ARE WORK REGISTERS.
 ; R7 AND R15 MUST BE PRESERVED THROUGHOUT THE SEARCH.
         ORG 0
         FIM 4,0F0H
@@ -29,7 +32,7 @@ RLOOP:  FIM 0,ROOTM     ; R3 = THE FIRST MOVE
         LD 3            ; X MOVES THERE
         XCH 5
         SRC 4
-        LDM 1
+        LDM 2
         WRM
         LDM 0           ; DEPTH 0, ALPHA 2, BETA 9
         XCH 6
@@ -143,13 +146,30 @@ PSHOW:  LD 2
         JUN PRINT
 PDONE:  BBL 0
         ORG 0D0H
-ROOTM:  DB 0,1,4
+ROOTM:  DB 7,8,11        ; CELLS 0, 1 AND 4
 MOVESM: DB 6DH,6FH,76H,65H,73H,3AH,20H,0
 ITERM:  DB 0DH,69H,74H,65H,72H,61H,74H,69H,6FH,6EH,73H,3AH,20H,31H,0DH,0
 
-; ENTER A NODE AT DEPTH R6 AFTER THE MOVE TO CELL R5, WITH ALPHA AND BETA
-; IN R10 AND R11.
+; ENTER A NODE AT DEPTH R6 AFTER THE MOVE TO CHARACTER R5, WITH ALPHA AND
+; BETA IN R10 AND R11.
         ORG 100H
+FOUND:  LD 6            ; THE PIECE IS 1 + (DEPTH AND 1): X (2) ON ODD DEPTHS
+        RAR
+        TCC
+        IAC
+        XCH 14          ; KEPT FOR THE CHILD'S WIN CHECK
+        LD 14
+PLACE:  WRM
+        SRC 6           ; SAVE THIS FRAME
+        LD 5
+        WR0
+        LD 9
+        WR1
+        LD 10
+        WR2
+        LD 11
+        WR3
+        INC 6           ; ENTER THE CHILD, WHOSE MOVE IS R5
 ENTER:  ISZ 15,COUNTED  ; BINARY NODE COUNT: R15, R7, STATUS 2 AND STATUS 3
         ISZ 7,COUNTED
         FIM 0,0E0H
@@ -165,9 +185,16 @@ COUNTED: CLC            ; ONLY DEPTHS 4 AND UP CAN HAVE A WINNER
         LDM 3
         SUB 6
         JCN 2,START
-        JMS WINNER
-        JCN 4,NOWIN
-        LDM 6           ; THE LAST MOVER WON: X AT EVEN DEPTHS, O AT ODD ONES
+; DISPATCH THE LAST MOVE, BY PIECE R14, TO ITS DIRECT LINE CHECKS, WHICH JUMP
+; TO WON OR NOWIN. NO SENTINEL OR PAIR-TABLE LOOP IS NEEDED; EACH CELL
+; HAS ONLY TWO TO FOUR LINES. WTAB AND ITS JUMPS SHARE THIS PAGE, AS FIN
+; AND JIN USE THEIR OWN PAGE.
+WINNER: FIM 0,WTAB AND 0F0H ; R1 = THE CHARACTER, 7 TO 15
+        LD 5
+        XCH 1
+        FIN 0
+        JIN 0
+WON:    LDM 6           ; THE LAST MOVER WON: X AT EVEN DEPTHS, O AT ODD ONES
         XCH 12
         LD 6
         RAR
@@ -182,8 +209,8 @@ NOWIN:  CLC             ; DEPTH 8 IS A FULL BOARD: A TIE
         LDM 5
         XCH 12
         JUN RETURN
-START:  LDM 0           ; TRY THE MOVES FROM CELL 0
-        XCH 8
+START:  LDM 7           ; TRY THE MOVES FROM CELL 0
+        XCH 5
         LDM 9           ; MINIMIZE FROM 9 OR MAXIMIZE FROM 2
         XCH 9
         LD 6
@@ -191,55 +218,28 @@ START:  LDM 0           ; TRY THE MOVES FROM CELL 0
         JCN 0AH,NEXT
         LDM 2
         XCH 9
-NEXT:   LD 8            ; FIND THE NEXT BLANK CELL; CELL 9 IS ALWAYS BLANK
-        XCH 5
-        SRC 4
+NEXT:   SRC 4           ; FIND THE NEXT BLANK CELL
         RDM
         JCN 4,FOUND
-        INC 8
-        JUN NEXT
-FOUND:  CLC
-        LDM 9
-        SUB 8
-        JCN 4,NOMORE
-        LD 6            ; 1 + ((~DEPTH) AND 1): X ON ODD DEPTHS, O ON EVEN
-        CMA
-        RAR
-        TCC
-        IAC
-PLACE:  WRM
-        SRC 6           ; SAVE THIS FRAME
-        LD 8
-        WR0
-        LD 9
-        WR1
-        LD 10
-        WR2
-        LD 11
-        WR3
-        INC 6           ; ENTER THE CHILD, WHOSE MOVE IS R5
-        JUN ENTER
+        ISZ 5,NEXT      ; AFTER CHARACTER 15 THERE ARE NO MORE
 NOMORE: LD 9
         XCH 12
 
 ; RETURN SCORE R12 TO THE PARENT.
 RETURN: LD 6
         JCN 4,TOROOT
-        LD 6
         DAC
         XCH 6
         SRC 6           ; RESTORE THE PARENT'S FRAME
         RD0
-        XCH 8
+        XCH 5
         RD1
         XCH 9
         RD2
         XCH 10
         RD3
         XCH 11
-        LD 8            ; UNDO ITS MOVE
-        XCH 5
-        SRC 4
+        SRC 4           ; UNDO ITS MOVE
         LDM 0
         WRM
         LD 6
@@ -286,22 +286,11 @@ RMAX:   CLC             ; MAXIMIZE: X WINNING ENDS THE SEARCH
         JCN 0AH,RNEXT
         LD 9
         XCH 10
-RNEXT:  INC 8
-        JUN NEXT
+RNEXT:  ISZ 5,NEXT
+        JUN NOMORE
 TOROOT: JUN ROOTDN
-
-; DISPATCH THE LAST MOVE TO ITS DIRECT LINE CHECKS. NO SENTINEL OR
-; PAIR-TABLE LOOP IS NEEDED; EACH CELL HAS ONLY TWO TO FOUR LINES.
-        ORG 200H
-WINNER: SRC 4
-        RDM
-        XCH 14
-        FIM 0,WTAB AND 0FFH
-        LD 5
-        XCH 1
-        FIN 0
-        JIN 0
-        ORG 280H
+; THE LINE CHECKS FOR EACH LAST MOVE, BY ITS CHARACTER, 7 TO 15.
+        ORG 1D7H
 WTAB:   DB JT0 AND 0FFH,JT1 AND 0FFH,JT2 AND 0FFH,JT3 AND 0FFH
         DB JT4 AND 0FFH,JT5 AND 0FFH,JT6 AND 0FFH,JT7 AND 0FFH
         DB JT8 AND 0FFH
@@ -317,315 +306,315 @@ JT8:    JUN W8
 
         ORG 300H
 ; LAST MOVE: CELL 0
-W0:     FIM 4,0F0H+1
+W0:     FIM 4,0F7H+1
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C01
-        FIM 4,0F0H+2
+        FIM 4,0F7H+2
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C01:     FIM 4,0F0H+3
+C01:     FIM 4,0F7H+3
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C02
-        FIM 4,0F0H+6
+        FIM 4,0F7H+6
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C02:     FIM 4,0F0H+4
+C02:     FIM 4,0F7H+4
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO3
-        FIM 4,0F0H+8
+        FIM 4,0F7H+8
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-        BBL 0
+        JUN NOWIN
 ; LAST MOVE: CELL 1
-W1:     FIM 4,0F0H+0
+W1:     FIM 4,0F7H+0
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C11
-        FIM 4,0F0H+2
+        FIM 4,0F7H+2
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C11:     FIM 4,0F0H+4
+C11:     FIM 4,0F7H+4
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO3
-        FIM 4,0F0H+7
+        FIM 4,0F7H+7
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-        BBL 0
+        JUN NOWIN
 ; LAST MOVE: CELL 2
-W2:     FIM 4,0F0H+0
+W2:     FIM 4,0F7H+0
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C21
-        FIM 4,0F0H+1
+        FIM 4,0F7H+1
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C21:     FIM 4,0F0H+5
+C21:     FIM 4,0F7H+5
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C22
-        FIM 4,0F0H+8
+        FIM 4,0F7H+8
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C22:     FIM 4,0F0H+4
+C22:     FIM 4,0F7H+4
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO3
-        FIM 4,0F0H+6
+        FIM 4,0F7H+6
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-        BBL 0
+        JUN NOWIN
 ; LAST MOVE: CELL 3
-W3:     FIM 4,0F0H+0
+W3:     FIM 4,0F7H+0
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C31
-        FIM 4,0F0H+6
+        FIM 4,0F7H+6
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C31:     FIM 4,0F0H+4
+C31:     FIM 4,0F7H+4
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO3
-        FIM 4,0F0H+5
+        FIM 4,0F7H+5
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-        BBL 0
+        JUN NOWIN
 ; LAST MOVE: CELL 4
-W4:     FIM 4,0F0H+0
+W4:     FIM 4,0F7H+0
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C41
-        FIM 4,0F0H+8
+        FIM 4,0F7H+8
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C41:     FIM 4,0F0H+2
+C41:     FIM 4,0F7H+2
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C42
-        FIM 4,0F0H+6
+        FIM 4,0F7H+6
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C42:     FIM 4,0F0H+1
+C42:     FIM 4,0F7H+1
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C43
-        FIM 4,0F0H+7
+        FIM 4,0F7H+7
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-C43:     FIM 4,0F0H+3
+C43:     FIM 4,0F7H+3
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO3
-        FIM 4,0F0H+5
+        FIM 4,0F7H+5
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES3
-        BBL 0
-WNO3:   BBL 0
-WYES3:  BBL 1
+        JUN NOWIN
+WNO3:   JUN NOWIN
+WYES3:  JUN WON
 
         ORG 400H
 ; LAST MOVE: CELL 5
-W5:     FIM 4,0F0H+3
+W5:     FIM 4,0F7H+3
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C51
-        FIM 4,0F0H+4
+        FIM 4,0F7H+4
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-C51:     FIM 4,0F0H+2
+C51:     FIM 4,0F7H+2
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO4
-        FIM 4,0F0H+8
+        FIM 4,0F7H+8
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-        BBL 0
+        JUN NOWIN
 ; LAST MOVE: CELL 6
-W6:     FIM 4,0F0H+0
+W6:     FIM 4,0F7H+0
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C61
-        FIM 4,0F0H+3
+        FIM 4,0F7H+3
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-C61:     FIM 4,0F0H+7
+C61:     FIM 4,0F7H+7
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C62
-        FIM 4,0F0H+8
+        FIM 4,0F7H+8
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-C62:     FIM 4,0F0H+2
+C62:     FIM 4,0F7H+2
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO4
-        FIM 4,0F0H+4
+        FIM 4,0F7H+4
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-        BBL 0
+        JUN NOWIN
 ; LAST MOVE: CELL 7
-W7:     FIM 4,0F0H+1
+W7:     FIM 4,0F7H+1
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C71
-        FIM 4,0F0H+4
+        FIM 4,0F7H+4
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-C71:     FIM 4,0F0H+6
+C71:     FIM 4,0F7H+6
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO4
-        FIM 4,0F0H+8
+        FIM 4,0F7H+8
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-        BBL 0
+        JUN NOWIN
 ; LAST MOVE: CELL 8
-W8:     FIM 4,0F0H+0
+W8:     FIM 4,0F7H+0
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C81
-        FIM 4,0F0H+4
+        FIM 4,0F7H+4
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-C81:     FIM 4,0F0H+2
+C81:     FIM 4,0F7H+2
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,C82
-        FIM 4,0F0H+5
+        FIM 4,0F7H+5
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-C82:     FIM 4,0F0H+6
+C82:     FIM 4,0F7H+6
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 0CH,WNO4
-        FIM 4,0F0H+7
+        FIM 4,0F7H+7
         SRC 4
         RDM
         CLC
         SUB 14
         JCN 4,WYES4
-        BBL 0
-WNO4:   BBL 0
-WYES4:  BBL 1
+        JUN NOWIN
+WNO4:   JUN NOWIN
+WYES4:  JUN WON
         END

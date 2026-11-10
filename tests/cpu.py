@@ -255,8 +255,10 @@ class Console(unittest.TestCase):
 
     def e_math(self, setups, helper):
         source = (ROOT/'examples/e.asm').read_text()
-        routines = 'TIMES10:'+source.split('TIMES10:',1)[1].rsplit('        END',1)[0]
-        registers = (0,1,2,3,4,5,6,14,15)
+        # TIMES10 is part of the inner loop; ending it with a BBL makes it callable.
+        times10 = 'TIMES10:'+source.split('TIMES10:',1)[1].split('T10END:',1)[0]+'        BBL 0\n'
+        routines = times10+source[source.index('        ORG 0F0H'):].rsplit('        END',1)[0]
+        registers = (2,3,4,5,6,8,9,14,15)
         records = []
         # Batch cases in ROM: hundreds of process launches are slow on Windows.
         for start in range(0,len(setups),32):
@@ -264,7 +266,7 @@ class Console(unittest.TestCase):
             program = '        JUN TEST\n        ORG 0A0H\n'+routines
             program += '        ORG 200H\nTEST:\n'
             for setup in batch:
-                program += setup+f'        JMS {helper}\n        FIM 8,0F0H\n        SRC 8\n'
+                program += setup+f'        JMS {helper}\n        FIM 0,0F0H\n        SRC 0\n'
                 for reg in registers:
                     # ASCII 0..?: subtract '0' to recover each raw nibble.
                     program += f'        LDM 3\n        WRR\n        LD {reg}\n        WRR\n'
@@ -278,31 +280,34 @@ class Console(unittest.TestCase):
         return records
 
     def test_e_division(self):
+        # DIVIDE takes N in R2R3 and ~N in R10R11, and is never called with
+        # N = 1, which the inner loop does without dividing.
         cases = {(n, (n%10)*n + ((n*37//11+3)%n)) for n in range(2,200)}
         for n in (2,3,15,16,17,31,32,127,128,191,192,199):
             cases.update((n,q*n+r) for q in (0,1,8,9) for r in (0,n-1))
-        cases.update((1,x) for x in (0,1,15,16,27,255,256,4095))
         cases = sorted(cases)
-        setups = [(f'        FIM 0,{n}\n        FIM 2,255\n'
+        setups = [(f'        FIM 2,{n}\n        FIM 10,{~n&255}\n'
                    f'        FIM 4,{x>>4}\n        FIM 6,{(x&15)<<4}\n'
-                   '        FIM 14,0ABH\n        STC\n') for n,x in cases]
+                   '        FIM 14,0ABH\n        CLC\n') for n,x in cases]
         for (n,x),regs in zip(cases,self.e_math(setups,'DIVIDE')):
             with self.subTest(n=n,x=x):
-                self.assertEqual((regs[4]*256+regs[5]*16+regs[6],regs[2]*16+regs[3]),divmod(x,n))
-                self.assertEqual((regs[0],regs[1]),(n>>4,n&15))
+                self.assertEqual((regs[4]*256+regs[5]*16+regs[6],regs[8]*16+regs[9]),divmod(x,n))
+                self.assertEqual((regs[2],regs[3]),(n>>4,n&15))
 
     def test_e_multiply_by_ten(self):
+        # The spigot adds 10 * A(N) to a quotient of at most 9, so the sum
+        # stays below 4096; TIMES10 relies on that, skipping a CLC.
         cases = {(a,a%10) for a in range(256)}
         cases.update((a,x) for a in (0,1,15,16,25,127,128,199,255)
-                     for x in (15,16,255,256,4095))
+                     for x in (15,16,255,256,1535,4095) if x+10*a < 4096)
         cases = sorted(cases)
-        setups = [(f'        FIM 0,199\n        FIM 4,{x>>4}\n'
+        setups = [(f'        FIM 2,199\n        FIM 4,{x>>4}\n'
                    f'        FIM 6,{(x&15)<<4}\n        FIM 12,{a}\n'
                    '        FIM 14,0ABH\n        STC\n') for a,x in cases]
         for (a,x),regs in zip(cases,self.e_math(setups,'TIMES10')):
             with self.subTest(a=a,x=x):
-                self.assertEqual(regs[4]*256+regs[5]*16+regs[6],(x+10*a)&4095)
-                self.assertEqual((regs[0],regs[1]),(12,7))
+                self.assertEqual(regs[4]*256+regs[5]*16+regs[6],x+10*a)
+                self.assertEqual((regs[2],regs[3]),(12,7))
 
     def test_sieve_flags(self):
         source = (ROOT/'examples/sieve.asm').read_text()
@@ -335,7 +340,7 @@ class Console(unittest.TestCase):
         self.assertNotEqual(checked,source)
         state, output, code = run(checked,limit=2_000_000)
         self.assertEqual((code,output),(0,b'moves: 6493\niterations: 1\n'))
-        self.assertEqual(state['ram'][0][300:310],'0'*10)  # board fully undone
+        self.assertEqual(state['ram'][0][300:316],'0'*16)  # board, characters 7 to 15, fully undone
         # Exercise carries in the cached binary count separately from search.
         counter = 'ENTER:'+source.split('ENTER:',1)[1].split('COUNTED:',1)[0]
         for count in (0,15,16,255,256,4095,4096,6492,65535):
@@ -369,7 +374,11 @@ class Console(unittest.TestCase):
         from itertools import combinations, product
         lines = ((0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6))
         source = (ROOT/'examples/ttt.asm').read_text()
-        routines = source[source.index('; DISPATCH THE LAST MOVE'):].rsplit('        END',1)[0]
+        # The search jumps into the line checks, which jump on to WON or NOWIN;
+        # returns there make them callable. The dispatch shares its table's page.
+        dispatch = source[source.index('WINNER:'):source.index('WON:')]
+        checks = source[source.index('        ORG 1D7H'):].rsplit('        END',1)[0]
+        routines = ('        ORG 1C0H\n'+dispatch+'WON:    BBL 1\nNOWIN:  BBL 0\n'+checks)
         cases = set()
         for piece in (1,2):
             for last in range(9):
@@ -395,12 +404,12 @@ class Console(unittest.TestCase):
             program = '        LDM 0\n        DCL\n        JUN TEST\n'+routines
             program += '        ORG 500H\nTEST:\n'
             for board,last in batch:
-                program += '        FIM 4,0F0H\n'
+                program += '        FIM 4,0F7H\n'
                 for value in board:
                     program += f'        LDM {value}\n        SRC 4\n        WRM\n        INC 5\n'
                 program += ('        FIM 6,5AH\n        FIM 8,67H\n        FIM 10,89H\n'
-                            '        FIM 12,0BCH\n        FIM 14,0ABH\n'
-                            f'        FIM 4,{240+last}\n        JMS WINNER\n        XCH 2\n'
+                            f'        FIM 12,0BCH\n        FIM 14,{board[last]*16+11}\n'
+                            f'        FIM 4,{247+last}\n        JMS WINNER\n        XCH 2\n'
                             '        FIM 0,0F0H\n        SRC 0\n')
                 for reg in registers:
                     program += f'        LDM 3\n        WRR\n        LD {reg}\n        WRR\n'

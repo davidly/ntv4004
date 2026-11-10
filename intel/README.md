@@ -83,13 +83,13 @@ session. Every result matches ntv4004 exactly, including the cycle counts:
 | hello | `Hello from the Intel 4004!` | 319 |
 | echo | its input, in uppercase, up to a period | 353 for `Hello, world.` |
 | fib | the first 70 Fibonacci numbers | 31,710 |
-| sieve | `1899 primes.` | 5,655,553 |
-| e | 192 digits of e, then `done.` | 3,458,421 |
-| ttt | `moves: 6493`, `iterations: 1` | 1,020,584 |
-| c/hello, compiled by cc4.py | `Hello from C on the Intel 4004!` | 1,775 |
-| c/ttt, compiled by cc4.py | `move count:      6493`, `iteration count: 1` | 11,951,902 |
-| c/queens, compiled by cc4.py | the first solution, then `92 solutions` | 5,538,133 |
-| c/hanoi, compiled by cc4.py | the moves for 3 discs, then the counts for 3 and 10 | 1,167,360 |
+| sieve | `1899 primes.` | 4,220,640 |
+| e | 192 digits of e, then `done.` | 2,458,025 |
+| ttt | `moves: 6493`, `iterations: 1` | 838,584 |
+| c/hello, compiled by cc4.py | `Hello from C on the Intel 4004!` | 1,773 |
+| c/ttt, compiled by cc4.py | `move count:      6493`, `iteration count: 1` | 11,955,484 |
+| c/queens, compiled by cc4.py | the first solution, then `92 solutions` | 5,538,131 |
+| c/hanoi, compiled by cc4.py | the moves for 3 discs, then the counts for 3 and 10 | 1,167,358 |
 
 ### INTERP's commands and object format
 
