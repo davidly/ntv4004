@@ -7,15 +7,21 @@
 ; BEING TRIED, 1 THE VALUE, 2 ALPHA, 3 BETA. EVEN DEPTHS MINIMIZE (O TO
 ; MOVE), ODD DEPTHS MAXIMIZE (X TO MOVE).
 ; RAM REGISTER 15 IS THE BOARD: 0 BLANK, 1 X, 2 O, WITH A BLANK CELL 9
-; THAT ENDS THE SEARCH FOR MOVES. RAM REGISTER 14'S STATUS CHARACTERS
-; COUNT THE NODES IN BCD.
+; THAT ENDS THE SEARCH FOR MOVES. THE NODE COUNT IS BINARY: LOW NIBBLES
+; IN R15 AND R7, HIGH NIBBLES IN RAM REGISTER 14'S STATUS 2 AND 3.
+; R7 CAN HOLD A COUNT DIGIT BECAUSE SRC 6'S LOW NIBBLE DOES NOT AFFECT
+; WHICH STATUS REGISTER RD0-RD3/WR0-WR3 ADDRESS.
 ; R4R5 SELECTS BOARD CELL R5 (R4 = 15)   R6R7 SELECTS FRAME R6 = D
 ; R8 THE MOVE   R9 THE VALUE   R10 ALPHA   R11 BETA   R12 A SCORE
 ; R13 THE FIRST MOVE'S NUMBER   R0-R3 AND R14 ARE WORK REGISTERS.
+; R7 AND R15 MUST BE PRESERVED THROUGHOUT THE SEARCH.
         ORG 0
         FIM 4,0F0H
         LDM 0
         XCH 13
+        FIM 14,0
+        LDM 0
+        XCH 7
 RLOOP:  FIM 0,ROOTM     ; R3 = THE FIRST MOVE
         LD 13
         XCH 1
@@ -43,36 +49,70 @@ ROOTDN: FIM 0,ROOTM     ; UNDO THE FIRST MOVE
         LDM 3
         SUB 13
         JCN 0CH,RLOOP
+        LD 15           ; SAVE THE TWO CACHED LOW BINARY COUNT NIBBLES
+        XCH 11
+        LD 7
+        XCH 10
         FIM 14,0F0H     ; R14R15 SELECTS ROM PORT 15, THE CONSOLE
         SRC 14
         FIM 0,MOVESM
         JMS PRINT
-        FIM 0,0E0H      ; THE COUNT, WITHOUT LEADING ZEROS
+        FIM 0,0E0H      ; LOAD THE BINARY COUNT INTO R8-R11
         SRC 0
         RD3
         XCH 8
         RD2
         XCH 9
-        RD1
-        XCH 10
-        RD0
-        XCH 11
         SRC 14
         LDM 0
-        XCH 6           ; R6 = 0 UNTIL A DIGIT IS PRINTED
-        LD 8
-        JMS PDIG
-        LD 9
-        JMS PDIG
-        LD 10
-        JMS PDIG
+        XCH 6           ; SUPPRESS LEADING ZERO DIGITS
+        FIM 0,03H
+        FIM 2,0E8H      ; THOUSANDS: 1000 = 03E8H
+        JMS DECIM
+        FIM 0,00H
+        FIM 2,64H       ; HUNDREDS
+        JMS DECIM
+        FIM 2,0AH       ; TENS
+        JMS DECIM
         LDM 1
         XCH 6
-        LD 11
+        LD 11           ; ONES
         JMS PDIG
         FIM 0,ITERM
         JMS PRINT
 DONE:   JUN DONE
+
+; PRINT ONE DECIMAL COLUMN OF R8-R11, WITH PLACE VALUE R0-R3.
+; SUBTRACT AT MOST NINE TIMES. R14-R15 ARE FREE AFTER SELECTING THE PORT.
+DECIM:  LDM 0
+        XCH 12
+DLOOP:  CLC
+        LD 11
+        SUB 3
+        XCH 13
+        CMC
+        LD 10
+        SUB 2
+        XCH 14
+        CMC
+        LD 9
+        SUB 1
+        XCH 15
+        CMC
+        LD 8
+        SUB 0
+        JCN 0AH,DPRINT
+        XCH 8
+        LD 15
+        XCH 9
+        LD 14
+        XCH 10
+        LD 13
+        XCH 11
+        INC 12
+        JUN DLOOP
+DPRINT: LD 12
+        JUN PDIG
 
 ; PRINT THE DIGIT IN THE ACCUMULATOR UNLESS IT IS A LEADING ZERO.
 PDIG:   XCH 7
@@ -110,26 +150,16 @@ ITERM:  DB 0DH,69H,74H,65H,72H,61H,74H,69H,6FH,6EH,73H,3AH,20H,31H,0DH,0
 ; ENTER A NODE AT DEPTH R6 AFTER THE MOVE TO CELL R5, WITH ALPHA AND BETA
 ; IN R10 AND R11.
         ORG 100H
-ENTER:  FIM 0,0E0H      ; COUNT THE NODE IN BCD
+ENTER:  ISZ 15,COUNTED  ; BINARY NODE COUNT: R15, R7, STATUS 2 AND STATUS 3
+        ISZ 7,COUNTED
+        FIM 0,0E0H
         SRC 0
-        RD0
-        IAC
-        DAA
-        WR0
-        JCN 0AH,COUNTED
-        RD1
-        IAC
-        DAA
-        WR1
-        JCN 0AH,COUNTED
         RD2
         IAC
-        DAA
         WR2
         JCN 0AH,COUNTED
         RD3
         IAC
-        DAA
         WR3
 COUNTED: CLC            ; ONLY DEPTHS 4 AND UP CAN HAVE A WINNER
         LDM 3
@@ -172,11 +202,11 @@ FOUND:  CLC
         LDM 9
         SUB 8
         JCN 4,NOMORE
-        LD 6            ; X (1) MOVES AT ODD DEPTHS, O (2) AT EVEN ONES
+        LD 6            ; 1 + ((~DEPTH) AND 1): X ON ODD DEPTHS, O ON EVEN
+        CMA
         RAR
         TCC
-        JCN 0CH,PLACE
-        LDM 2
+        IAC
 PLACE:  WRM
         SRC 6           ; SAVE THIS FRAME
         LD 8
@@ -260,48 +290,342 @@ RNEXT:  INC 8
         JUN NEXT
 TOROOT: JUN ROOTDN
 
-; RETURN 1 IF THE PIECE ON CELL R5 COMPLETES A LINE THROUGH IT, OR 0.
+; DISPATCH THE LAST MOVE TO ITS DIRECT LINE CHECKS. NO SENTINEL OR
+; PAIR-TABLE LOOP IS NEEDED; EACH CELL HAS ONLY TWO TO FOUR LINES.
         ORG 200H
-WINNER: SRC 4           ; R14 = THE PIECE
+WINNER: SRC 4
         RDM
         XCH 14
-        FIM 0,OFFS AND 0FFH ; R0R1 = THE START OF THE CELL'S LINES
+        FIM 0,WTAB AND 0FFH
         LD 5
         XCH 1
         FIN 0
-WLOOP:  FIN 2           ; R2, R3 = THE LINE'S OTHER CELLS
-        LD 2
-        IAC
-        JCN 4,WNO       ; 0FFH ENDS THE LIST
-        LD 2
-        XCH 5
-        SRC 4
-        RDM
-        CLC
-        SUB 14
-        JCN 0CH,WNEXT
-        LD 3
-        XCH 5
-        SRC 4
-        RDM
-        CLC
-        SUB 14
-        JCN 4,WYES
-WNEXT:  ISZ 1,WLOOP
-        INC 0
-        JUN WLOOP
-WYES:   BBL 1
-WNO:    BBL 0
+        JIN 0
         ORG 280H
-OFFS:   DB L0 AND 0FFH,L1 AND 0FFH,L2 AND 0FFH,L3 AND 0FFH,L4 AND 0FFH
-        DB L5 AND 0FFH,L6 AND 0FFH,L7 AND 0FFH,L8 AND 0FFH
-L0:     DB 12H,36H,48H,0FFH
-L1:     DB 02H,47H,0FFH
-L2:     DB 01H,58H,46H,0FFH
-L3:     DB 06H,45H,0FFH
-L4:     DB 08H,26H,17H,35H,0FFH
-L5:     DB 34H,28H,0FFH
-L6:     DB 03H,78H,24H,0FFH
-L7:     DB 14H,68H,0FFH
-L8:     DB 04H,25H,67H,0FFH
+WTAB:   DB JT0 AND 0FFH,JT1 AND 0FFH,JT2 AND 0FFH,JT3 AND 0FFH
+        DB JT4 AND 0FFH,JT5 AND 0FFH,JT6 AND 0FFH,JT7 AND 0FFH
+        DB JT8 AND 0FFH
+JT0:    JUN W0
+JT1:    JUN W1
+JT2:    JUN W2
+JT3:    JUN W3
+JT4:    JUN W4
+JT5:    JUN W5
+JT6:    JUN W6
+JT7:    JUN W7
+JT8:    JUN W8
+
+        ORG 300H
+; LAST MOVE: CELL 0
+W0:     FIM 4,0F0H+1
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C01
+        FIM 4,0F0H+2
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C01:     FIM 4,0F0H+3
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C02
+        FIM 4,0F0H+6
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C02:     FIM 4,0F0H+4
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO3
+        FIM 4,0F0H+8
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+        BBL 0
+; LAST MOVE: CELL 1
+W1:     FIM 4,0F0H+0
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C11
+        FIM 4,0F0H+2
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C11:     FIM 4,0F0H+4
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO3
+        FIM 4,0F0H+7
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+        BBL 0
+; LAST MOVE: CELL 2
+W2:     FIM 4,0F0H+0
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C21
+        FIM 4,0F0H+1
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C21:     FIM 4,0F0H+5
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C22
+        FIM 4,0F0H+8
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C22:     FIM 4,0F0H+4
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO3
+        FIM 4,0F0H+6
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+        BBL 0
+; LAST MOVE: CELL 3
+W3:     FIM 4,0F0H+0
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C31
+        FIM 4,0F0H+6
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C31:     FIM 4,0F0H+4
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO3
+        FIM 4,0F0H+5
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+        BBL 0
+; LAST MOVE: CELL 4
+W4:     FIM 4,0F0H+0
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C41
+        FIM 4,0F0H+8
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C41:     FIM 4,0F0H+2
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C42
+        FIM 4,0F0H+6
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C42:     FIM 4,0F0H+1
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C43
+        FIM 4,0F0H+7
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+C43:     FIM 4,0F0H+3
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO3
+        FIM 4,0F0H+5
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES3
+        BBL 0
+WNO3:   BBL 0
+WYES3:  BBL 1
+
+        ORG 400H
+; LAST MOVE: CELL 5
+W5:     FIM 4,0F0H+3
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C51
+        FIM 4,0F0H+4
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+C51:     FIM 4,0F0H+2
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO4
+        FIM 4,0F0H+8
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+        BBL 0
+; LAST MOVE: CELL 6
+W6:     FIM 4,0F0H+0
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C61
+        FIM 4,0F0H+3
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+C61:     FIM 4,0F0H+7
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C62
+        FIM 4,0F0H+8
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+C62:     FIM 4,0F0H+2
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO4
+        FIM 4,0F0H+4
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+        BBL 0
+; LAST MOVE: CELL 7
+W7:     FIM 4,0F0H+1
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C71
+        FIM 4,0F0H+4
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+C71:     FIM 4,0F0H+6
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO4
+        FIM 4,0F0H+8
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+        BBL 0
+; LAST MOVE: CELL 8
+W8:     FIM 4,0F0H+0
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C81
+        FIM 4,0F0H+4
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+C81:     FIM 4,0F0H+2
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,C82
+        FIM 4,0F0H+5
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+C82:     FIM 4,0F0H+6
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 0CH,WNO4
+        FIM 4,0F0H+7
+        SRC 4
+        RDM
+        CLC
+        SUB 14
+        JCN 4,WYES4
+        BBL 0
+WNO4:   BBL 0
+WYES4:  BBL 1
         END

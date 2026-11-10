@@ -86,67 +86,6 @@ ISTEP: SRC 0           ; R12R13 = A(N)
         JCN 0CH,OUTER
         JUN FINISH
 
-; X = X + 10 * R12R13, AS 8 * A + 2 * A IN R11R12R13 AND R7R8R9.
-TIMES10: LDM 0
-        XCH 11
-        CLC             ; R11R12R13 = 2 * A
-        LD 13
-        RAL
-        XCH 13
-        LD 12
-        RAL
-        XCH 12
-        LD 11
-        RAL
-        XCH 11
-        LD 11           ; R7R8R9 = 2 * A
-        XCH 7
-        LD 12
-        XCH 8
-        LD 13
-        XCH 9
-        CLC             ; R11R12R13 = 4 * A
-        LD 13
-        RAL
-        XCH 13
-        LD 12
-        RAL
-        XCH 12
-        LD 11
-        RAL
-        XCH 11
-        CLC             ; R11R12R13 = 8 * A
-        LD 13
-        RAL
-        XCH 13
-        LD 12
-        RAL
-        XCH 12
-        LD 11
-        RAL
-        XCH 11
-        CLC             ; X = X + 8 * A
-        LD 6
-        ADD 13
-        XCH 6
-        LD 5
-        ADD 12
-        XCH 5
-        LD 4
-        ADD 11
-        XCH 4
-        CLC             ; X = X + 2 * A
-        LD 6
-        ADD 9
-        XCH 6
-        LD 5
-        ADD 8
-        XCH 5
-        LD 4
-        ADD 7
-        XCH 4
-        BBL 0
-
 ; PRINT X, WHICH IS LESS THAN 100, IN DECIMAL WITHOUT A LEADING ZERO.
 PRINTX: FIM 8,0F0H      ; R8R9 SELECTS ROM PORT 15, THE CONSOLE
         SRC 8
@@ -196,63 +135,95 @@ MSHOW:  LD 2
 DONE:   JUN DONE
 DONEM:  DB 0DH,64H,6FH,6EH,65H,2EH,0DH,0
 
-; X = X / N, RESTORING DIVISION: 12 TIMES, SHIFT X LEFT INTO THE REMAINDER,
-; SUBTRACT N IF IT FITS, AND SHIFT THE QUOTIENT BIT INTO X'S LOW END.
-; THE REMAINDER CAN REACH 9 BITS BEFORE THE SUBTRACTION; R10 HOLDS BIT 8.
-        ORG 100H
-DIVIDE: LDM 0           ; REMAINDER = 0
+; MULTIPLY EACH NIBBLE OF A BY TEN USING A 16-BYTE ROM TABLE, THEN COMBINE.
+; FIN USES R0R1, SO SAVE N IN THE NO-LONGER-NEEDED REMAINDER REGISTERS.
+; TEN AND BOTH FIN INSTRUCTIONS MUST SHARE A ROM PAGE; TEN STARTS AT F0H.
+TIMES10: LD 0
         XCH 2
-        LDM 0
+        LD 1
         XCH 3
-        LDM 4           ; R7 COUNTS 12 STEPS UP TO 16
+        LDM 15
+        XCH 0
+        LD 13
+        XCH 1
+        FIN 8
+        LD 12
+        XCH 1
+        FIN 10
+        CLC
+        LD 8
+        ADD 11
+        XCH 8
+        LDM 0
+        ADD 10
         XCH 7
         CLC
-DLOOP:  LD 6            ; SHIFT THE QUOTIENT BIT INTO X, X'S TOP INTO R2R3
-        RAL
+        LD 6
+        ADD 9
         XCH 6
         LD 5
-        RAL
+        ADD 8
         XCH 5
         LD 4
-        RAL
+        ADD 7
         XCH 4
-        LD 3
-        RAL
-        XCH 3
         LD 2
-        RAL
-        XCH 2
-        LDM 0           ; R10 = BIT 8 OF THE REMAINDER
-        RAL
-        XCH 10
-        CLC             ; R8R9 = REMAINDER - N
+        XCH 0
         LD 3
-        SUB 1
-        XCH 9
-        CMC             ; SUB'S CARRY MEANS NO BORROW, BUT IT SUBTRACTS ONE MORE
-        LD 2
-        SUB 0
-        XCH 8
-        JCN 2,DSUB      ; NO BORROW: IT FITS
-        LD 10
-        JCN 4,DNO
-DSUB:   LD 8
-        XCH 2
-        LD 9
-        XCH 3
-        STC             ; QUOTIENT BIT 1
-        ISZ 7,DLOOP
-        JUN DLAST
-DNO:    CLC             ; QUOTIENT BIT 0
-        ISZ 7,DLOOP
-DLAST:  LD 6            ; SHIFT IN THE LAST QUOTIENT BIT
-        RAL
-        XCH 6
-        LD 5
-        RAL
-        XCH 5
-        LD 4
-        RAL
-        XCH 4
+        XCH 1
         BBL 0
+        ORG 0F0H
+TEN:    DB 0,10,20,30,40,50,60,70,80,90,100,110,120,130,140,150
+
+
+; X = X / N, R2R3 = X MOD N. REPEATED SUBTRACTION IS CHEAPER HERE:
+; THE SPIGOT'S QUOTIENT IS AT MOST 9 EXCEPT FOR ITS FIRST OUTPUT (27).
+; N = 1 NEEDS NO DIVISION; X IS ALREADY THE QUOTIENT AND REMAINDER IS ZERO.
+; FOR N >= 2, 0 <= A(N) < N AND THE PREVIOUS QUOTIENT <= 9 GIVE X < 10*N.
+; THIS IS A SPIGOT HELPER, NOT A GENERAL DIVIDE (THE QUOTIENT IS ONE NIBBLE).
+        ORG 100H
+DIVIDE: FIM 2,0
+        LD 0
+        JCN 0CH,DSTART
+        LD 1
+        DAC
+        JCN 4,DRET
+DSTART: LD 1           ; R10R11 = -N MOD 256; THE TOP NEGATIVE NIBBLE IS F
+        CMA
+        IAC
+        XCH 11
+        LD 0
+        CMA
+        ADD 2
+        XCH 10
+        LDM 0
+        XCH 7
+DLOOP:  CLC             ; SUBTRACT N IN PLACE BY ADDING ITS 12-BIT NEGATIVE
+        LD 6
+        ADD 11
+        XCH 6
+        LD 5
+        ADD 10
+        XCH 5
+        LDM 15
+        ADD 4
+        XCH 4
+        JCN 0AH,DOVER
+        INC 7
+        JUN DLOOP
+DOVER:  CLC             ; THE FAILED SUBTRACTION: RESTORE ONLY THE REMAINDER
+        LD 6
+        ADD 1
+        XCH 3
+        LD 5
+        ADD 0
+        XCH 2
+        LDM 0
+        XCH 4
+        LDM 0
+        XCH 5
+        LD 7
+        XCH 6
+DRET:   BBL 0
+
         END

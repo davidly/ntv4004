@@ -7,7 +7,7 @@
 ; REGISTER PAIR FOR SRC, AND THE BANK. THE 4004 HAS NO AND, SO A FIN
 ; TABLE TESTS AND CLEARS A BIT.
 ; R0R1 FIN INDEX: BIT TIMES 4, CHARACTER  R2R3 FIN RESULT: SET, CLEARED
-; R4R5 I CHARACTER   R10 I BIT X4   R11 I BANK
+; R4R5 I CHARACTER   R10 SAVED I BIT X4 DURING MARKING   R11 I BANK
 ; R6R7 K CHARACTER   R12 K BIT X4   R13 K BANK
 ; R8R9 P CHARACTER   R14 P BIT X4   R15 P BANK, WHERE P = 2I+3
 ; BANK 0, RAM REGISTER 0, STATUS 0-3: THE PRIME COUNT IN BCD
@@ -128,23 +128,23 @@ MSG:    DB 20H,70H,72H,69H,6DH,65H,73H,2EH,0DH,0
         ORG 100H
         DB 00H,10H,02H,12H,04H,14H,06H,16H
         DB 08H,18H,0AH,1AH,0CH,1CH,0EH,1EH
-SCAN:   SRC 4           ; IS FLAG I SET?
+SCAN:   SRC 4           ; CACHE THE CHARACTER; FALSE FLAGS CANNOT CHANGE IT
         RDM
         XCH 1
-        LD 10
-        XCH 0
-        FIN 2
+SCBIT:  FIN 2           ; R0 IS THE CURRENT BIT FIELD; R1 IS THE CACHED FLAGS
         LD 2
         JCN 0CH,ISPRM
 NEXTB:  CLC             ; I = I + 1
         LDM 4
-        ADD 10
-        XCH 10
-        JCN 0AH,SCAN
+        ADD 0
+        XCH 0
+        JCN 0AH,SCBIT
         ISZ 5,SCAN
         ISZ 4,SCAN
         JUN NBANK
-ISPRM:  JUN PRIME
+ISPRM:  LD 0            ; SAVE I'S BIT FIELD WHILE THE TABLE POINTER IS REUSED
+        XCH 10
+        JUN PRIME
         ORG 140H
         DB 00H,01H,10H,11H,04H,05H,14H,15H
         DB 08H,09H,18H,19H,0CH,0DH,1CH,1DH
@@ -179,9 +179,69 @@ KDONE:  JUN COUNT
         ORG 180H
         DB 00H,01H,02H,03H,10H,11H,12H,13H
         DB 08H,09H,0AH,0BH,18H,19H,1AH,1BH
+; P < 1024: ITS BANK FIELD IS ZERO. ONLY A CHARACTER OVERFLOW CHANGES
+; THE BANK, SO THE COMMON MARKING STEP NEEDS NO BANK ADD OR DCL.
+KFAST:  SRC 6
+        RDM
+        XCH 1
+        LD 12
+        XCH 0
+        FIN 2
+        LD 3
+        WRM
+        CLC
+        LD 12
+        ADD 14
+        XCH 12
+        LD 7
+        ADD 9
+        XCH 7
+        LD 6
+        ADD 8
+        XCH 6
+        JCN 0AH,KFAST
+        INC 13
+        LD 13
+        RAL
+        JCN 2,KFDON
+        LD 13
+        DCL
+        JUN KFAST
+KFDON:  JUN COUNT
         ORG 1C0H
         DB 00H,01H,02H,03H,04H,05H,06H,07H
         DB 10H,11H,12H,13H,14H,15H,16H,17H
+
+; P < 64: ONLY A LOW-CHARACTER OVERFLOW NEEDS THE HIGH CHARACTER UPDATED.
+        ORG 1D0H
+KSMAL:  SRC 6
+        RDM
+        XCH 1
+        LD 12
+        XCH 0
+        FIN 2
+        LD 3
+        WRM
+        CLC
+        LD 12
+        ADD 14
+        XCH 12
+        LD 7
+        ADD 9
+        XCH 7
+        JCN 0AH,KSMAL
+        LD 6
+        IAC
+        XCH 6
+        JCN 0AH,KSMAL
+        INC 13
+        LD 13
+        RAL
+        JCN 2,KSDON
+        LD 13
+        DCL
+        JUN KSMAL
+KSDON:  JUN COUNT
 
 ; FLAG I IS SET: P = I + I + 3 IS PRIME. CLEAR ITS ODD MULTIPLES FROM
 ; K = I + P, AND COUNT IT.
@@ -229,7 +289,15 @@ PRIME:  CLC             ; P = 2I
         LD 13
         RAL
         JCN 2,COUNT     ; K IS PAST THE SIEVE
-        JUN KLOOP
+        LD 15
+        JCN 0CH,KLARGE
+        LD 13
+        DCL
+        LD 8
+        JCN 0CH,KMID
+        JUN KSMAL
+KMID:   JUN KFAST
+KLARGE: JUN KLOOP
 COUNT:  LDM 0           ; COUNT = COUNT + 1, IN BCD
         DCL
         FIM 0,00H
@@ -253,7 +321,12 @@ COUNT:  LDM 0           ; COUNT = COUNT + 1, IN BCD
         IAC
         DAA
         WR3
-CDONE:  LD 11           ; BACK TO THE SCAN'S BANK
+CDONE:  LD 11           ; REFRESH THE SCAN CHARACTER AFTER MARKING MULTIPLES
         DCL
+        SRC 4
+        RDM
+        XCH 1
+        LD 10
+        XCH 0
         JUN NEXTB
         END

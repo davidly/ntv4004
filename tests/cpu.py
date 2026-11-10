@@ -22,12 +22,12 @@ STATE = re.compile(r'acc (\w) carry (\d) regs (\w{16}) (\w{8}) pc (\w+) sp (\d) 
                    r'src (\w\w) cm (\d) bank (\d) rombank (\d) cycles (\d+)')
 
 
-def run(source, cpu='4004', keys=None, options=()):
+def run(source, cpu='4004', keys=None, options=(), limit=100_000):
     """Assemble source, run it, and return (state, stdout, return code)."""
     memory, _, _ = asm4.Assembler(cpu).assemble(source + '        END\n')
     with tempfile.TemporaryDirectory(prefix='ntv4004 cpu ') as directory:
         Path(directory, 'p.hex').write_text(asm4.hex_file(memory), encoding='ascii')
-        command = [str(NTV), '-r', '-n:100000', *(['-4'] if cpu == '4040' else []), *options]
+        command = [str(NTV), '-r', f'-n:{limit}', *(['-4'] if cpu == '4040' else []), *options]
         if keys is not None:
             Path(directory, 'keys.txt').write_bytes(keys)
             command.append('-l:keys.txt')
@@ -252,6 +252,167 @@ class Console(unittest.TestCase):
         result = subprocess.run([str(NTV), 'echo.hex'], cwd=ROOT / 'examples', input=b'Hi there. More', capture_output=True,
                                 timeout=60)
         self.assertEqual(result.stdout, b'HI THERE.')
+
+    def e_math(self, setups, helper):
+        source = (ROOT/'examples/e.asm').read_text()
+        routines = 'TIMES10:'+source.split('TIMES10:',1)[1].rsplit('        END',1)[0]
+        registers = (0,1,2,3,4,5,6,14,15)
+        records = []
+        # Batch cases in ROM: hundreds of process launches are slow on Windows.
+        for start in range(0,len(setups),32):
+            batch = setups[start:start+32]
+            program = '        JUN TEST\n        ORG 0A0H\n'+routines
+            program += '        ORG 200H\nTEST:\n'
+            for setup in batch:
+                program += setup+f'        JMS {helper}\n        FIM 8,0F0H\n        SRC 8\n'
+                for reg in registers:
+                    # ASCII 0..?: subtract '0' to recover each raw nibble.
+                    program += f'        LDM 3\n        WRR\n        LD {reg}\n        WRR\n'
+            _, output, code = run(program+'HALT:   JUN HALT\n')
+            self.assertEqual(code,0)
+            self.assertEqual(len(output),len(batch)*len(registers))
+            for offset in range(0,len(output),len(registers)):
+                regs = dict(zip(registers,(ch-48 for ch in output[offset:offset+len(registers)])))
+                self.assertEqual((regs[14],regs[15]),(10,11))
+                records.append(regs)
+        return records
+
+    def test_e_division(self):
+        cases = {(n, (n%10)*n + ((n*37//11+3)%n)) for n in range(2,200)}
+        for n in (2,3,15,16,17,31,32,127,128,191,192,199):
+            cases.update((n,q*n+r) for q in (0,1,8,9) for r in (0,n-1))
+        cases.update((1,x) for x in (0,1,15,16,27,255,256,4095))
+        cases = sorted(cases)
+        setups = [(f'        FIM 0,{n}\n        FIM 2,255\n'
+                   f'        FIM 4,{x>>4}\n        FIM 6,{(x&15)<<4}\n'
+                   '        FIM 14,0ABH\n        STC\n') for n,x in cases]
+        for (n,x),regs in zip(cases,self.e_math(setups,'DIVIDE')):
+            with self.subTest(n=n,x=x):
+                self.assertEqual((regs[4]*256+regs[5]*16+regs[6],regs[2]*16+regs[3]),divmod(x,n))
+                self.assertEqual((regs[0],regs[1]),(n>>4,n&15))
+
+    def test_e_multiply_by_ten(self):
+        cases = {(a,a%10) for a in range(256)}
+        cases.update((a,x) for a in (0,1,15,16,25,127,128,199,255)
+                     for x in (15,16,255,256,4095))
+        cases = sorted(cases)
+        setups = [(f'        FIM 0,199\n        FIM 4,{x>>4}\n'
+                   f'        FIM 6,{(x&15)<<4}\n        FIM 12,{a}\n'
+                   '        FIM 14,0ABH\n        STC\n') for a,x in cases]
+        for (a,x),regs in zip(cases,self.e_math(setups,'TIMES10')):
+            with self.subTest(a=a,x=x):
+                self.assertEqual(regs[4]*256+regs[5]*16+regs[6],(x+10*a)&4095)
+                self.assertEqual((regs[0],regs[1]),(12,7))
+
+    def test_sieve_flags(self):
+        source = (ROOT/'examples/sieve.asm').read_text()
+        primes = [True]*16384
+        primes[0] = primes[1] = False
+        for n in range(2,128):
+            if primes[n]:
+                for multiple in range(n*n,len(primes),n): primes[multiple] = False
+        flags = [primes[2*i+3] for i in range(8191)]+[False]
+        self.assertEqual(sum(flags),1899)
+        for passes in (1,2,10):
+            with self.subTest(passes=passes):
+                program = source.replace('LOOPS   EQU 10',f'LOOPS   EQU {passes}')
+                state, output, code = run(program,limit=10_000_000)
+                self.assertEqual((code,output),(0,b'1899 primes.\n'))
+                for bank in range(8):
+                    expected = ''.join(format(sum(int(flags[bank*1024+4*c+b])<<b
+                                                  for b in range(4)),'X') for c in range(256))
+                    # Dump order is 16 main characters, then four status, per chip register.
+                    main = ''.join(state['ram'][bank][i:i+16] for i in range(0,320,20))
+                    self.assertEqual(main,expected)
+
+    def test_ttt_search_and_counter(self):
+        source = (ROOT/'examples/ttt.asm').read_text()
+        # Assert each root really returns a draw, without modifying the board
+        # or cached count. A wrong score loops until the emulator budget fails.
+        checked = source.replace('ROOTDN: FIM 0,ROOTM',
+            'ROOTDN: CLC\n        LDM 5\n        SUB 12\n        JCN 4,ROOTOK\n'
+            'BAD:    JUN BAD\nROOTOK: FIM 0,ROOTM')
+        self.assertNotEqual(checked,source)
+        state, output, code = run(checked,limit=2_000_000)
+        self.assertEqual((code,output),(0,b'moves: 6493\niterations: 1\n'))
+        self.assertEqual(state['ram'][0][300:310],'0'*10)  # board fully undone
+        # Exercise carries in the cached binary count separately from search.
+        counter = 'ENTER:'+source.split('ENTER:',1)[1].split('COUNTED:',1)[0]
+        for count in (0,15,16,255,256,4095,4096,6492,65535):
+            with self.subTest(count=count):
+                setup = (f'        FIM 6,{(count>>4)&15}\n        FIM 14,{count&15}\n'
+                         '        FIM 0,0E0H\n        SRC 0\n'
+                         f'        LDM {(count>>8)&15}\n        WR2\n'
+                         f'        LDM {(count>>12)&15}\n        WR3\n        JUN ENTER\n'
+                         '        ORG 100H\n'+counter+'COUNTED: JUN COUNTED\n')
+                state, _, code = run(setup)
+                self.assertEqual(code,0)
+                high = state['ram'][0][14*20+18:14*20+20]
+                actual = (int(high[1],16)<<12)|(int(high[0],16)<<8)|(state['regs'][7]<<4)|state['regs'][15]
+                self.assertEqual(actual,(count+1)&65535)
+
+    def test_ttt_decimal_output(self):
+        source = (ROOT/'examples/ttt.asm').read_text()
+        source = source.replace('        ORG 0\n','        ORG 0\n        JUN SETUP\n',1)
+        source = source.replace('        LD 15','TPRNT:  LD 15',1).rsplit('        END',1)[0]
+        for count in (0,1,9,10,16,99,100,255,999,1000,4095,6493,9999):
+            with self.subTest(count=count):
+                setup = ('        ORG 600H\nSETUP:  LDM 0\n        DCL\n'
+                         f'        FIM 6,{(count>>4)&15}\n        FIM 14,{count&15}\n'
+                         '        FIM 0,0E0H\n        SRC 0\n'
+                         f'        LDM {(count>>8)&15}\n        WR2\n'
+                         f'        LDM {(count>>12)&15}\n        WR3\n        JUN TPRNT\n')
+                _, output, code = run(source+setup)
+                self.assertEqual((code,output),(0,f'moves: {count}\niterations: 1\n'.encode()))
+
+    def test_ttt_winner(self):
+        from itertools import combinations, product
+        lines = ((0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6))
+        source = (ROOT/'examples/ttt.asm').read_text()
+        routines = source[source.index('; DISPATCH THE LAST MOVE'):].rsplit('        END',1)[0]
+        cases = set()
+        for piece in (1,2):
+            for last in range(9):
+                board = [0]*9
+                board[last] = piece
+                cases.add((tuple(board),last))
+                for a,b in combinations([i for i in range(9) if i != last],2):
+                    for va,vb in product((1,2),repeat=2):
+                        board = [0]*9
+                        board[last],board[a],board[b] = piece,va,vb
+                        cases.add((tuple(board),last))
+                # A completed line elsewhere is not a win through this move.
+                for line in lines:
+                    if last not in line:
+                        board = [0]*9
+                        board[last] = piece
+                        for cell in line: board[cell] = piece
+                        cases.add((tuple(board),last))
+        cases = sorted(cases)
+        registers = (2,6,7,8,9,10,11,12,13,15)
+        for start in range(0,len(cases),24):
+            batch = cases[start:start+24]
+            program = '        LDM 0\n        DCL\n        JUN TEST\n'+routines
+            program += '        ORG 500H\nTEST:\n'
+            for board,last in batch:
+                program += '        FIM 4,0F0H\n'
+                for value in board:
+                    program += f'        LDM {value}\n        SRC 4\n        WRM\n        INC 5\n'
+                program += ('        FIM 6,5AH\n        FIM 8,67H\n        FIM 10,89H\n'
+                            '        FIM 12,0BCH\n        FIM 14,0ABH\n'
+                            f'        FIM 4,{240+last}\n        JMS WINNER\n        XCH 2\n'
+                            '        FIM 0,0F0H\n        SRC 0\n')
+                for reg in registers:
+                    program += f'        LDM 3\n        WRR\n        LD {reg}\n        WRR\n'
+            _, output, code = run(program+'HALT:   JUN HALT\n')
+            self.assertEqual(code,0)
+            self.assertEqual(len(output),len(batch)*len(registers))
+            for index,(board,last) in enumerate(batch):
+                with self.subTest(board=board,last=last):
+                    values = [c-48 for c in output[index*10:(index+1)*10]]
+                    winner = any(last in line and all(board[i] == board[last] for i in line)
+                                 for line in lines)
+                    self.assertEqual(values,[int(winner),5,10,6,7,8,9,11,12,11])
 
     def test_checked_in_examples_match_their_source(self):
         for path in sorted((ROOT / 'examples').glob('*.asm')):

@@ -244,9 +244,9 @@ and `char` elsewhere:
 | Program | ROM footprint | Instruction cycles | 740 kHz 4004 | Hand-written assembly |
 | --- | ---: | ---: | ---: | ---: |
 | [hello](examples/c/hello.c) | 90 bytes | 1,773 | 0.02 s | |
-| [e](examples/c/e.c) | 812 bytes | 29,482,644 | 319 s | 2.9 times as long |
-| [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s | 7.7 times |
-| [ttt](examples/c/ttt.c) | 1,688 bytes | 11,958,168 | 129 s | 10.1 times |
+| [e](examples/c/e.c) | 812 bytes | 29,482,644 | 319 s | 8.5 times as long |
+| [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s | 9.7 times |
+| [ttt](examples/c/ttt.c) | 1,688 bytes | 11,958,168 | 129 s | 11.7 times |
 | [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s | |
 | [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s | |
 | [maze](examples/c/maze.c) | 1,944 bytes | 460,917 | 4.98 s | |
@@ -259,9 +259,10 @@ Hanoi and counts them for ten, recursing eleven deep. Like ttt, both use
 `__nibble` under this compiler and `char` elsewhere, and print what gcc's
 builds of the same sources print.
 
-e comes closest because most of its time goes to division, which the library
-does much as the hand-written code does. ttt falls furthest behind: each
-recursive call saves and restores five status registers (eight with `char`
+The assembly e benchmark uses division specialized for its small quotients
+and a nibble lookup for multiplication by ten. C uses general arithmetic
+helpers and takes 8.5 times as many cycles. For ttt, each recursive call saves
+and restores five status registers (eight with `char`
 instead of `__nibble`), which the hand-written version avoids by keeping
 each depth's frame in its own RAM register.
 
@@ -443,9 +444,9 @@ python3 cc4.py --4040 examples/c/clock.c
 | [hello](examples/hello.asm) | prints a message from a ROM table with `FIN` | 319 | 3.4 ms |
 | [echo](examples/echo.asm) | copies input to output in uppercase until a period | depends on input | |
 | [fib](examples/fib.asm) | prints 70 Fibonacci numbers with 16-digit BCD arithmetic in RAM (`ADM`, `DAA`) | 31,710 | 0.34 s |
-| [sieve](examples/sieve.asm) | the BYTE sieve, 10 passes over 8,190 flags: `1899 primes.` | 7,157,483 | 77.4 s |
-| [e](examples/e.asm) | 192 digits of e from the factorial-series spigot, then `done.` | 10,285,867 | 111.2 s |
-| [ttt](examples/ttt.asm) | alpha-beta tic-tac-toe after first moves 0, 1 and 4: `moves: 6493` | 1,185,782 | 12.8 s |
+| [sieve](examples/sieve.asm) | the BYTE sieve, 10 passes over 8,191 flags: `1899 primes.` | 5,655,553 | 61.1 s |
+| [e](examples/e.asm) | 192 digits of e from the factorial-series spigot, then `done.` | 3,458,421 | 37.4 s |
+| [ttt](examples/ttt.asm) | alpha-beta tic-tac-toe after first moves 0, 1 and 4: `moves: 6493` | 1,020,584 | 11.0 s |
 
 ```sh
 echo "Hello, world." | ./ntv4004 examples/echo.hex
@@ -463,12 +464,33 @@ where nibbles suffice:
   with the bit times 4 in a nibble so additions carry from field to field.
   With no AND instruction, a `FIN` table tests and clears bits; its entries
   sit 40H apart so the loops that use it fit between them, as `FIN` reads its
-  own page.
+  own page. The scanner caches each RAM character while testing its four
+  flags and refreshes it after marking multiples. Specialized marking loops
+  for primes below 64 and below 1024 update upper address fields and bank
+  selection only when a carry requires it. The original ten-pass marking
+  order, beginning at `I+P`, is preserved. This reduces 7,157,483 cycles to
+  **5,655,553** (21.0% fewer), with ROM footprint increasing from 590 to
+  607 bytes.
 * **e** keeps each 8-bit array element in two banks at the same character
-  address, and divides its 12-bit value by shifting and subtracting.
+  address. For divisors of at least two, the spigot's quotient is at most nine,
+  so repeated subtraction is cheaper than a full 12-bit restoring divide.
+  The loop adds a precomputed negative divisor in place and restores the
+  remainder after the first failed subtraction. Division by one returns
+  immediately, also handling the initial output of 27. Multiplication by ten
+  looks up each nibble in a shared 16-byte ROM table and combines the results.
+  These changes reduce the benchmark from 10,285,867 to **3,458,421 cycles**
+  (**2.97× faster**, 66.4% fewer cycles), while shrinking its ROM footprint from
+  316 to 304 bytes. All 192 digits and the `done.` output are unchanged; the
+  image also matches Intel's MAC4 and runs identically in INTERP/4.
 * **ttt** keeps one frame per search depth in the four status characters of
   a RAM register, since the 4004's stack has only three levels, and every
-  score fits in a nibble.
+  score fits in a nibble. Its binary node counter keeps the low two nibbles in
+  spare registers and converts to decimal once, when printing. Direct win
+  checks for each possible last move replace the pair-table loop, and piece
+  selection uses depth parity without branching. Ascending move order, the
+  three draws, and all **6493 nodes** are preserved. Runtime falls from
+  1,185,782 to **1,020,584 cycles** (13.9% fewer). ROM footprint grows from
+  682 to 1190 bytes, within the original 4004's 4096-byte ROM.
 
 Writing 4004 code: `SUB` and `SBM` subtract one more when the carry is 1,
 yet leave the carry 1 when there was no borrow, so complement it (`CMC`)
@@ -482,7 +504,13 @@ between the nibbles of a longer subtraction.
 
 * `tests/cpu.py` checks the instruction definitions above, the page
   boundaries, both stacks, the 4040 instructions and ROM banks, RAM banks,
-  the console and the examples. It needs only ntv4004 and Python.
+  the console and the examples. Direct tests of e's arithmetic helpers cover
+  divisors 1–199, quotient/remainder boundaries, all 256 multiply inputs, and
+  carry propagation. Sieve tests check every RAM flag after one, two and ten
+  passes against independent prime counts. TTT tests cover the three root
+  scores, board restoration, binary-counter carries, decimal formatting, and
+  over 2000 last-move win cases with register preservation checks.
+  It needs only ntv4004 and Python.
 * `tests/cc.py` compiles and runs 60 seeded random C programs, with every
   operator, assignment, branch and loop, and checks their output against a
   Python model of 16-bit C. It also runs programs for functions, recursion,
