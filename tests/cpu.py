@@ -429,7 +429,9 @@ class Console(unittest.TestCase):
                   '        LD 2\n        WRR\n'+end())
         for options, expected in (((),b'0'),(('-c',),b'1')):
             with self.subTest(options=options):
-                _, output, code = run(source,options=options)
+                # Use file input: inherited stdin can be a real terminal when
+                # test.bat/test.sh is launched from a command prompt.
+                _, output, code = run(source,keys=b'',options=options)
                 self.assertEqual((code,output),(0,expected))
 
     def test_checked_in_examples_match_their_source(self):
