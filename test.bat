@@ -5,7 +5,7 @@ setlocal
 pushd "%~dp0" || exit /b 1
 call m.bat || goto failed
 if "%PYTHON%"=="" set "PYTHON=python"
-for %%t in (cpu cc basic basic_large asm interp) do (
+for %%t in (cpu fast cc basic basic_large asm interp) do (
     echo.
     echo === tests\%%t.py ===
     "%PYTHON%" tests\%%t.py || goto failed

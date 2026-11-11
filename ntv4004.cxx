@@ -430,6 +430,7 @@ static void usage()
 {
     printf( "Intel 4004/4040 console machine\n"
             "usage: ntv4004 [options] file.hex [more.hex ...]\n"
+            "  --reference use the reference instruction loop for diagnostics\n"
             "  -4          emulate the 4040 (default 4004)\n"
             "  -c          offer an echoed line console even with file or redirected input\n"
             "  -a:address  entry address (default 0)\n"
@@ -513,7 +514,7 @@ static void report_state()
 int main( int argc, char * argv[] )
 {
     uint64_t address = 0, limit = 0, hz = 0;
-    bool performance = false, trace = false, traceInstructions = false, report = false, options = true;
+    bool performance = false, trace = false, traceInstructions = false, report = false, options = true, reference = false;
     I4004::Model model = I4004::model4004;
     std::vector< const char * > files;
     const char * inputPath = 0, * symbolPath = 0;
@@ -523,7 +524,8 @@ int main( int argc, char * argv[] )
         uint64_t value = 0;
         if ( options && 0 == strcmp( arg, "--" ) ) { options = false; continue; }
         if ( options && ( 0 == strcmp( arg, "--help" ) || 0 == strcmp( arg, "-h" ) ) ) { usage(); return 0; }
-        if ( options && 0 == strcmp( arg, "-p" ) ) performance = true;
+        if ( options && 0 == strcmp( arg, "--reference" ) ) reference = true;
+        else if ( options && 0 == strcmp( arg, "-p" ) ) performance = true;
         else if ( options && 0 == strcmp( arg, "-c" ) ) g_forceLineConsole = true;
         else if ( options && 0 == strcmp( arg, "-4" ) ) model = I4004::model4040;
         else if ( options && 0 == strcmp( arg, "-r" ) ) report = true;
@@ -617,7 +619,13 @@ int main( int argc, char * argv[] )
     while ( !halted_for_good() && !cpu.ended && !g_stopped && ( !limit || cpu.cycles < limit ) )
     {
         uint64_t budget = hz ? 128 : 65536;
-        for ( uint64_t n = 0; n < budget && !halted_for_good() && !cpu.ended && ( !limit || cpu.cycles < limit ); n++ )
+        if ( !reference && !hz && !traceInstructions && I4004::model4004 == model )
+        {
+            uint64_t until = cpu.cycles + budget;
+            if ( limit && limit < until ) until = limit;
+            selfJump = cpu.run_fast4004( until );
+        }
+        else for ( uint64_t n = 0; n < budget && !halted_for_good() && !cpu.ended && ( !limit || cpu.cycles < limit ); n++ )
         {
             if ( cpu.halted && !cpu.interruptRequest ) // HLT executes NOPs until the next timer interrupt
                 cpu.cycles = std::max( cpu.cycles, g_nextInterrupt );

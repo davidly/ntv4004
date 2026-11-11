@@ -50,6 +50,7 @@ Options:
 
 | Option | Meaning |
 | --- | --- |
+| `--reference` | use the reference instruction loop for diagnostics |
 | `-4` | emulate the 4040 (default 4004) |
 | `-a:address` | entry address (default 0); above 0FFFH starts in the 4040's second ROM bank |
 | `-c` | offer the interactive line console even with redirected/file input |
@@ -66,6 +67,30 @@ A program ends successfully with `HLT` (4040) or a `JUN` to its own address,
 the usual way to stop a 4004, unless an `-I` interrupt can still be taken:
 then `HLT` waits for it, and a program may idle in a loop while its
 interrupts work. Ctrl-C or Ctrl-Q also exits.
+
+### Emulator throughput
+
+Unthrottled 4004 execution uses a specialized dispatch loop with fixed register
+and ROM banks, sharing instruction definitions with the reference CPU. The
+4040, instruction tracing (`-i`), and speed limiting (`-s`) use the reference
+loop. `--reference` also selects it explicitly for comparison.
+
+Five alternating runs of the previous executable and optimized executable,
+each limited to 100 million instruction cycles on the development Linux machine:
+
+| BASIC program | Previous host time | Optimized host time | Speedup |
+| --- | ---: | ---: | ---: |
+| e | 0.443 s | 0.146 s | 3.04x |
+| sieve | 0.444 s | 0.142 s | 3.13x |
+| ttt | 0.417 s | 0.136 s | 3.07x |
+
+The same five-run measurement with Windows/MSVC gives 2.26x (e), 2.20x
+(sieve), and 1.88x (ttt). Times are medians; actual throughput depends on the
+host and compiler.
+
+On the development Linux machine, complete BASIC benchmarks take about 1.4 s
+(e), 15.6 s (sieve), and 11.9 s (ttt). These are host execution times;
+emulated instruction-cycle counts and the hardware runtimes below are unchanged.
 
 ### The console
 
@@ -546,6 +571,8 @@ between the nibbles of a longer subtraction.
   scores, board restoration, binary-counter carries, decimal formatting, and
   over 2000 last-move win cases with register preservation checks.
   It needs only ntv4004 and Python.
+* `tests/fast.py` compares fast and reference CPU/RAM snapshots, seeded instruction
+  programs, page and stack boundaries, exact cycle limits, and BASIC execution.
 * `tests/cc.py` compiles and runs 60 seeded random C programs, with every
   operator, assignment, branch and loop, and checks their output against a
   Python model of 16-bit C. It also runs programs for functions, recursion,

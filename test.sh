@@ -4,7 +4,7 @@
 set -eu
 cd "$(dirname "$0")"
 ./m.sh
-for test in cpu cc basic basic_large asm interp; do
+for test in cpu fast cc basic basic_large asm interp; do
     printf '\n=== tests/%s.py ===\n' "$test"
     "${PYTHON:-python3}" "tests/$test.py"
     if [ "$test" = cc ]; then

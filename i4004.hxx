@@ -45,6 +45,9 @@ struct I4004
     void set_reg( unsigned n, uint8_t value ) { ( ( n < 8 && registerBank1 ) ? r1[ n ] : r[ n ] ) = value & 0xf; }
     void end_emulation() { ended = true; }
     uint64_t emulate( uint64_t maxcycles ); // runs whole instructions until halted, ended, or maxcycles
+    // Untraced 4004 batch, stopping before a self-jump. Returns true for that stop.
+    // The host uses step() for the 4040, tracing, timers and speed limiting.
+    bool run_fast4004( uint64_t cycleLimit );
     unsigned step();                        // one instruction; returns its instruction cycles
 
 private:
@@ -67,4 +70,21 @@ private:
     void pop();
     void add( uint8_t value, bool carryIn );
     unsigned execute( uint16_t address, uint8_t op );
+    template<bool plain> unsigned execute_decoded( uint16_t address, uint8_t op );
+    template<bool plain> uint8_t fetch_decoded();
+    template<bool plain> uint8_t read_reg( unsigned n ) const { return plain ? r[ n ] : reg( n ); }
+    template<bool plain> void write_reg( unsigned n, uint8_t v ) {
+        if ( plain ) r[ n ] = v & 15; else set_reg( n, v );
+    }
+    template<bool plain> uint8_t read_pair( unsigned p ) const {
+        return (uint8_t) ( ( read_reg<plain>( 2*p ) << 4 ) | read_reg<plain>( 2*p+1 ) );
+    }
+    template<bool plain> void write_pair( unsigned p, uint8_t v ) {
+        write_reg<plain>( 2*p, v >> 4 ); write_reg<plain>( 2*p+1, v & 15 );
+    }
+    template<bool plain> void call( uint16_t address ) {
+        if ( plain ) { sp = ( sp+1 ) & 3; stack[ sp ] = address & 0xfff; }
+        else push( address );
+    }
+    template<bool plain> void ret() { if ( plain ) sp = ( sp+3 ) & 3; else pop(); }
 };
