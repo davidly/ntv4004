@@ -216,6 +216,10 @@ unsigned I4004::execute( uint16_t address, uint8_t op )
 // force the PC, cycle count and the rest to be reloaded. The state is written
 // back around the host's I/O callbacks and at the end. Each of the 256 cases
 // has its own constant opcode. There is no instruction cache: ROM is read afresh.
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable: 4127) // each opcode's case tests its constant operand
+#endif
 bool I4004::run_fast4004( uint64_t cycleLimit )
 {
     assert( model4004 == m_model && !m_trace && !romBank1 && !registerBank1 );
@@ -374,6 +378,9 @@ bool I4004::run_fast4004( uint64_t cycleLimit )
 #undef CHARACTER
 #undef PAIR
 }
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
 
 unsigned I4004::step()
 {
