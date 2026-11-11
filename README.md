@@ -71,26 +71,33 @@ interrupts work. Ctrl-C or Ctrl-Q also exits.
 
 ### Emulator throughput
 
-Unthrottled 4004 execution uses a specialized dispatch loop with fixed register
-and ROM banks, sharing instruction definitions with the reference CPU. The
-4040, instruction tracing (`-i`), and speed limiting (`-s`) use the reference
-loop. `--reference` also selects it explicitly for comparison.
+Unthrottled 4004 execution uses a specialized loop with fixed register and
+ROM banks. It implements each of the 256 opcodes itself and keeps the CPU's
+state in local variables for a whole batch of instructions, so the compiler
+can hold the accumulator, carry, registers, program counter, stack and cycle
+count in machine registers. They go back to the CPU object only around the
+host's I/O callbacks and at the end of a batch. The 4040, instruction tracing
+(`-i`), and speed limiting (`-s`) use the reference loop, which `--reference`
+also selects. `tests/fast.py` runs seeded programs, page and cycle-limit edges,
+BASIC snapshots and 200 random 4 KB ROMs both ways, requiring the same output
+and final state.
 
-Five alternating runs of the previous executable and optimized executable,
-each limited to 100 million instruction cycles on the development Linux machine:
+Five alternating runs of each executable, each limited to 100 million
+instruction cycles, on the development Linux machine (medians):
 
-| BASIC program | Previous host time | Optimized host time | Speedup |
-| --- | ---: | ---: | ---: |
-| e | 0.443 s | 0.146 s | 3.04x |
-| sieve | 0.444 s | 0.142 s | 3.13x |
-| ttt | 0.417 s | 0.136 s | 3.07x |
+| BASIC program | Reference loop | Earlier fast loop | Current fast loop | Gain over earlier |
+| --- | ---: | ---: | ---: | ---: |
+| e | 0.330 s | 0.143 s | 0.100 s | 1.43x |
+| sieve | 0.327 s | 0.142 s | 0.098 s | 1.45x |
+| ttt | 0.311 s | 0.133 s | 0.095 s | 1.40x |
 
-The same five-run measurement with Windows/MSVC gives 2.26x (e), 2.20x
-(sieve), and 1.88x (ttt). Times are medians; actual throughput depends on the
-host and compiler.
+The earlier fast loop shared the reference CPU's instruction code and state.
+With Windows/MSVC it measured 2.26x (e), 2.20x (sieve), and 1.88x (ttt) the
+reference loop's speed; the current loop has not yet been measured there.
+Actual throughput depends on the host and compiler.
 
-On the development Linux machine, complete BASIC benchmarks take about 1.4 s
-(e), 15.6 s (sieve), and 11.9 s (ttt). These are host execution times;
+On the development Linux machine, complete BASIC benchmarks take about 0.9 s
+(e), 10.6 s (sieve), and 8.3 s (ttt). These are host execution times;
 emulated instruction-cycle counts and the hardware runtimes below are unchanged.
 
 ### The console

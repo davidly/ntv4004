@@ -267,7 +267,7 @@ marking is redundant; this avoids storing a separate base-prime table.
 This is a segmented variant, so report its timings separately from the original
 unsegmented sieve. A complete ten-pass load/run takes **10,875,546,541 instruction
 cycles**, about **117,573.48 seconds (32 hours 39 minutes)** at 740 kHz, excluding
-I/O waits. Host emulation took about 49 seconds on the development machine.
+I/O waits. Host emulation took about 11 seconds on the development machine.
 If using `-n`, allow `-n:12000000000`. Output is:
 
 ```
@@ -327,7 +327,7 @@ numbered lines and fits the packed source buffer.
 
 A complete native load/run takes **8,688,987,816 instruction cycles**, about
 **93,935.00 seconds (26 hours 5 minutes)** at 740 kHz, excluding I/O waits.
-Host emulation took about 38 seconds on the development machine. The regression
+Host emulation took about 8 seconds on the development machine. The regression
 test runs the full search and checks the exact output; it also checks packed
 storage boundaries, CRLF input, branches, scalar `T` versus `THEN`, array bounds,
 and reproducible ROM builds. The standard interpreter includes the interactive command loop; the packed

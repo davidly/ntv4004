@@ -59,5 +59,25 @@ class Fast(unittest.TestCase):
                     self.assertEqual(*results)
 
 
+    def test_random_roms(self):
+        """Whole 4 KB ROMs of random bytes, with console input, for breadth:
+        the fast loop implements every instruction separately."""
+        import random
+        import tempfile
+        import asm4
+        with tempfile.TemporaryDirectory(prefix='ntv4004 fast ') as directory:
+            for seed in range(200):
+                generator = random.Random(seed)
+                memory = {address: generator.randrange(256) for address in range(4096)}
+                Path(directory, 'p.hex').write_text(asm4.hex_file(memory), encoding='ascii')
+                Path(directory, 'keys.txt').write_bytes(bytes(generator.randrange(128) for _ in range(64)))
+                results = []
+                for options in ((), ('--reference',)):
+                    command = [str(NTV), '-r', '-n:20000', '-l:keys.txt', *options, 'p.hex']
+                    p = subprocess.run(command, cwd=directory, capture_output=True, timeout=60)
+                    results.append((p.returncode, p.stdout, p.stderr))
+                with self.subTest(seed=seed):
+                    self.assertEqual(*results)
+
 if __name__ == '__main__':
     unittest.main()
