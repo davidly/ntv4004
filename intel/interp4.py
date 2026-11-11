@@ -20,6 +20,7 @@ import tempfile
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import mac4  # noqa: E402
+import ka10  # noqa: E402
 from pdp10 import NATIVE, PDP10  # noqa: E402
 
 IMAGES = {'4004': 'int4.sav', '4040': 'int40.sav'}
@@ -143,9 +144,12 @@ def main():
     parser.add_argument('-n', '--limit', type=int, default=10_000_000, help='instruction cycle limit')
     parser.add_argument('-p', action='store_true', help='report instruction cycles')
     parser.add_argument('--transcript', action='store_true', help='print INTERP\'s whole transcript')
+    parser.add_argument('--ka10', action='store_true', help='report how long INTERP/4 took on a 1967 DEC KA10')
     args = parser.parse_args()
     try:
         memory, symbols = load_program(args.program, args.cpu)
+        if args.ka10:
+            PDP10.timers = []
         keys = args.input.read_bytes() if args.input else b''
         output, cycles, text = run_program(memory, symbols, args.cpu, keys, args.limit)
         if args.transcript:
@@ -154,6 +158,8 @@ def main():
             sys.stdout.write(output.decode('latin-1'))
         if args.p:
             print(f'{cycles} instruction cycles', file=sys.stderr)
+        if args.ka10:
+            print(ka10.report(PDP10.timers), file=sys.stderr)
     except (OSError, ValueError, mac4.AssemblyError, SimulationError) as error:
         print(f'INTERP/4: {error}', file=sys.stderr)
         return 1

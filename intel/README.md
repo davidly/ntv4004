@@ -139,6 +139,39 @@ are why `tests/interp.py` avoids a few cases:
 * `HLT` makes INTERP/40 execute `NOP` continuously, as the hardware does;
   ntv4004 ends the program there.
 
+## KA10 runtime
+
+`--ka10` on `mac4.py` and `interp4.py` reports, on stderr, roughly how long
+the tool itself would have run on a 1967 DEC KA10:
+
+```sh
+python3 intel/mac4.py --ka10 examples/hello.asm -o hello.hex
+```
+
+prints `approximate DEC KA10 runtime: 3.595117 seconds on a 1967 DEC KA10,
+asynchronous logic, 1.00 us MA10 core memory (excluding 246 monitor calls and
+I/O waits)`. `interp4.py` times INTERP/4 alone, not the MAC4 run that loads an
+`.asm` program.
+
+The times are those of the PDP-10 System Reference Manual (May 1968) for user
+mode, with 1.00 µs MA10 core memory, plus the manual's terms for indexing,
+indirection, shift counts, byte sizes, BLT lengths and floating-point
+alignment; [ka10.py](ka10.py) describes the model. Monitor calls ran in the
+operating system, so they are counted but not timed, and I/O waits are left
+out. Both runners total the time in hundredths of a microsecond and report
+exactly the same figure. The KA10's logic is asynchronous, so it has no clock
+rate, and the manual gives its times as ±5%.
+
+| Example | MAC4 | INTERP/4 |
+| --- | ---: | ---: |
+| hello | 3.60 s | 11.44 s |
+| sieve | 50.39 s | 3,925.46 s |
+| e | 43.72 s | 2,263.81 s |
+| ttt | 71.18 s | 787.52 s |
+
+The INTERP/4 runs use `-n 2000000000`. `tests/asm.py` requires both runners to
+report the same time for MAC4 on hello.
+
 ## Tests
 
 `tests/asm.py` compares asm4.py with MAC4 and MAC40 on every instruction and

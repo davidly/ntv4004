@@ -14,6 +14,7 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import ka10  # noqa: E402
 from pdp10 import NATIVE, PDP10  # noqa: E402
 
 UPSTREAM = HERE / 'upstream'
@@ -167,7 +168,10 @@ def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--4040', dest='cpu', action='store_const', const='4040', default='4004', help='use MAC40')
     group.add_argument('--expanded', dest='cpu', action='store_const', const='4040e', help='use MAC40E')
+    parser.add_argument('--ka10', action='store_true', help='report how long MAC4 took on a 1967 DEC KA10')
     args = parser.parse_args()
+    if args.ka10:
+        PDP10.timers = []
     try:
         memory, symbols, listing = assemble_source(args.source.read_text(encoding='ascii'), args.cpu)
         destination = args.output or args.source.with_suffix('.hex')
@@ -176,6 +180,8 @@ def main():
         if args.listing:
             args.listing.write_text(listing, encoding='ascii')
         print(f'{args.source}: assembled to {destination}')
+        if args.ka10:
+            print(ka10.report(PDP10.timers), file=sys.stderr)
     except (OSError, ValueError, AssemblyError) as error:
         print(f'MAC4: {error}', file=sys.stderr)
         return 1

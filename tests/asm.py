@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check that asm4.py assembles exactly the bytes and symbols that Intel's MAC4 and MAC40 do."""
+import os
 from pathlib import Path
 import sys
 import unittest
@@ -99,6 +100,23 @@ class Assembler(unittest.TestCase):
                                 ('LONGNAME: NOP\nLONGNAMX: NOP\n', 'same symbol'), ('LONGNAME: JUN LONGN\n', 'same symbol'), ('A:  NOP\nA:  NOP\n', 'more than once')):
             with self.subTest(source=source), self.assertRaisesRegex(asm4.AssemblyError, message):
                 asm4.Assembler().assemble(source)
+
+    @unittest.skipUnless(mac4.NATIVE.is_file(), 'native PDP-10 runner not built; run m.sh or m.bat')
+    def test_ka10_times_agree(self):
+        """Both runners total the same KA10 time for MAC4, to the hundredth of a microsecond."""
+        source = (ROOT / 'examples/hello.asm').read_text(encoding='ascii')
+        times = []
+        for python in ('', '1'):
+            os.environ['PDP10_PYTHON'] = python
+            mac4.PDP10.timers = []
+            try:
+                mac4.assemble_source(source)
+                times.append([(t.hundredths, t.instructions, t.monitor_calls, t.ki_only) for t in mac4.PDP10.timers])
+            finally:
+                mac4.PDP10.timers = None
+                del os.environ['PDP10_PYTHON']
+        self.assertEqual(times[0], times[1])
+        self.assertGreater(times[0][0][0], 0)
 
 
 if __name__ == '__main__':
