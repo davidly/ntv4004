@@ -31,7 +31,8 @@ of this repository.
 ## Build and run
 
 Building needs a C++11 compiler; the assembler and tests need Python 3.8 or
-newer. On Windows, use a Visual Studio developer command prompt.
+newer. On Windows, use a Visual Studio 2019 or newer developer command prompt
+(the build uses `/Ob3` for more aggressive inlining).
 
 ```sh
 ./m.sh                          # Windows: m.bat
