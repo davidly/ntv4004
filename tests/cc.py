@@ -791,6 +791,170 @@ __interrupt void tick(void)
                 cc4.compile_source(source, cpu=cpu, size=SIZE)
             self.assertIn(message, str(caught.exception))
 
+    def test_switch(self):
+        source = r"""
+int calls;
+int choose(int n) { calls++; return n; }
+int classify(int n) {
+    int value = 0;
+    switch (choose(n)) {
+        case -2: value = 10;
+        case 0: value += 2; break;
+        default: value = 30; break;
+        case 1: case 2: value = 20; break;
+        case 256: return 40;
+        case -1: return 50;
+    }
+    return value;
+}
+int main() {
+    int i, total = 0;
+    printf("%d %d %d %d %d %d %d\n", classify(-2), classify(0),
+        classify(1), classify(2), classify(3), classify(256), classify(-1));
+    printf("calls %d\n", calls);
+    for (i = 0; i < 5; i++) {
+        switch (i) {
+            case 0: continue;
+            case 1:
+                while (1) { total += 10; break; }
+                break;
+            case 2:
+                switch (i + 1) { case 3: total += 20; break; }
+                break;
+            default: total++;
+        }
+        total += 100;
+    }
+    printf("total %d\n", total);
+    i = 0;
+    switch (i++) { case 0: putchar('a'); }
+    switch (i++) { case 0: putchar('X'); }
+    switch (i++) { }
+    printf(" %d\n", i);
+    switch ((unsigned)32768) { case 32767: putchar('X'); break;
+        case 32768U: putchar('b'); break; default: putchar('X'); }
+    switch ((unsigned)65535) { case -1: putchar('c'); break; }
+    switch ((char)255) { case -1: putchar('X'); break;
+        case 255: putchar('d'); }
+    switch (1) puts("unreachable");
+    putchar('\n');
+    return 0;
+}
+"""
+        self.assertEqual(run_c(source), '12 2 20 20 30 40 50\ncalls 7\ntotal 432\na 3\nbcd\n')
+        # Case labels can occur inside a nested loop (Duff's device).
+        source = r"""
+int main() {
+    int count = 6, rounds = 2;
+    switch (count % 4) {
+        case 0: do { putchar('x');
+        case 3:      putchar('x');
+        case 2:      putchar('x');
+        case 1:      putchar('x');
+                } while (--rounds > 0);
+    }
+    putchar('\n'); return 0;
+}
+"""
+        self.assertEqual(run_c(source), 'xxxxxx\n')
+
+    def test_goto(self):
+        source = r"""
+int f(int n) {
+    int saved = n + 10, stage = 0, result = 0;
+again:
+    if (stage) return saved + result;
+    if (!n) return saved;
+    result = f(n - 1);
+    stage = 1;
+    goto again;
+}
+int g() { goto same; return 99; same: return 7; }
+int main() {
+    int i = 0, sum = 0;
+    goto begin;
+    sum = 999;
+begin:
+    sum += ++i;
+    if (i < 4) goto begin;
+    while (1) { switch (i) { case 4: goto done; } }
+done:
+    printf("%d %d %d\n", sum, i, f(3));
+    goto same;
+    puts("unreachable");
+same:
+    printf("%d\n", g());
+    { goto inner; puts("unreachable"); inner: putchar('x'); }
+    putchar('\n');
+    return 0;
+}
+"""
+        self.assertEqual(run_c(source), '10 4 46\n7\nx\n')
+
+    def test_sizeof(self):
+        source = r"""
+char bytes[7];
+int words[4];
+_Bool bits[13];
+__nibble nibbles[5];
+unsigned count = sizeof(words) / sizeof(words[0]);
+char small(void);
+int hits;
+char small(void) { hits++; return 1; }
+int main() {
+    char c = 3, local[sizeof(words)];
+    _Bool b;
+    __nibble n;
+    int i = 0, a[sizeof(char[3])];
+    printf("%u %u %u %u %u %u\n", sizeof(int), sizeof(unsigned short),
+        sizeof(char), sizeof(_Bool), sizeof(__nibble), sizeof(const volatile char));
+    printf("%u %u %u %u %u %u %u\n", sizeof bytes, sizeof(words), sizeof bits,
+        sizeof nibbles, count, sizeof(local), sizeof a);
+    printf("%u %u %u %u %u %u %u %u\n", sizeof c, sizeof(+c), sizeof(c++),
+        sizeof b, sizeof n, sizeof((char)0), sizeof((0, c)), sizeof(c + c));
+    printf("%u %u %u %u %u %u\n", sizeof "ab" "cd", sizeof("a\0b"),
+        sizeof(small()), sizeof(words[i++]), sizeof(1 / 0), sizeof sizeof c);
+    sizeof(i = small());
+    printf("%d %d %d\n", i, c, hits);
+    return 0;
+}
+"""
+        expected = ('2 2 1 1 1 1\n7 8 13 5 4 8 6\n1 2 1 1 1 1 1 2\n'
+                    '5 4 1 2 2 2\n0 3 0\n')
+        self.assertEqual(run_c(source), expected)
+        # Large type-only sizes must not allocate RAM, even as initializers.
+        source = 'unsigned n=sizeof(int[32767]); int main(){printf("%u\\n",n);return 0;}'
+        _, compiler = cc4.compile_source(source, size=SIZE)
+        self.assertEqual(run_c(source), '65534\n')
+        self.assertEqual(compiler.memory_top, 0)
+
+    def test_control_flow_errors(self):
+        cases = {
+            'int main(){goto missing;}': 'label missing is not defined',
+            'int main(){here:; here:;}': 'defined twice',
+            'int f(){goto here;} int main(){here:;}': 'label here is not defined',
+            'int main(){case 1:;}': 'not in a switch',
+            'int main(){default:;}': 'not in a switch',
+            'int main(){switch(0){case 1:; case 1:;}}': 'duplicate case',
+            'int main(){switch(0){case -1:; case 65535U:;}}': 'duplicate case',
+            'int main(){switch(0){default:; default:;}}': 'duplicate default',
+            'int main(){int n; switch(n){case n:;}}': 'constant expression',
+            'int main(){switch(0){continue;}}': 'not in a loop',
+            'int main(){sizeof(void);}': 'void',
+            'void f(){} int main(){sizeof(f());}': 'void',
+            'void f(){} int main(){sizeof(1 ? f() : f());}': 'void',
+            'void f(){} int main(){switch(f()) {}}': 'integer expression',
+            'int main(){switch((void)0) {}}': 'integer expression',
+            'int main(){sizeof((void)0);}': 'void',
+            'int main(){int a[3]; sizeof(a+1);}': 'pointers',
+            'int main(){int n; sizeof(int[n]);}': 'constant length',
+            'int main(){sizeof(char[0]);}': 'positive constant',
+        }
+        for source, message in cases.items():
+            with self.subTest(source), self.assertRaises(cc4.CompileError) as caught:
+                cc4.compile_source(source, size=SIZE)
+            self.assertIn(message, str(caught.exception))
+
     def test_errors(self):
         cases = {
             'int *p;': 'pointers',

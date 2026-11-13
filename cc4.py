@@ -20,8 +20,9 @@ it too. The language is C without pointers, structures or floating point:
   return through a table indexed by a return number stored with the callee.
   A call that can reach the caller again first saves the caller's
   variables on a stack in RAM.
-* if, else, while, do, for, break, continue, return, and every C operator
-  except the pointer, member and sizeof operators.
+* if, else, while, do, for, switch/case/default, goto and labels, break,
+  continue, return, and every C operator except pointer and member operators.
+  sizeof uses 8-bit C bytes, including for packed _Bool and __nibble objects.
 * putchar, getchar, puts, and printf with a constant format and %d %u %x %c
   %s (a string constant) and %%.
 * Hardware built-ins, compiled inline: __rom_out(chip, v) and __rom_in(chip)
@@ -296,10 +297,13 @@ class Function:
         self.params, self.locals, self.body, self.temps = [], [], None, []
         self.label = self.ret_slot = None
         self.interrupt = False
+        self.user_labels, self.gotos = {}, []
 
 
 SPECIFIERS = {'__interrupt', '__nibble', 'int', 'char', 'unsigned', 'signed', 'short', 'long', 'void', '_Bool', 'static', 'extern',
               'register', 'auto', 'const', 'volatile', 'float', 'double', 'struct', 'union', 'enum', 'typedef'}
+KEYWORDS = SPECIFIERS | {'if', 'else', 'while', 'do', 'for', 'switch', 'case', 'default',
+                         'goto', 'break', 'continue', 'return', 'sizeof'}
 BINARY = {'||': 1, '&&': 2, '|': 3, '^': 4, '&': 5, '==': 6, '!=': 6, '<': 7, '>': 7, '<=': 7, '>=': 7,
           '<<': 8, '>>': 8, '+': 9, '-': 9, '*': 10, '/': 10, '%': 10}
 ASSIGNMENTS = {'=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', '>>='}
@@ -310,6 +314,8 @@ class Parser:
     def __init__(self, tokens):
         self.tokens, self.pos = tokens, 0
         self.globals, self.functions, self.scopes, self.function = {}, {}, [], None
+        self.switches, self.return_types, self.unevaluated = [], {}, 0
+        self.qualifiers = set()
 
     def peek(self, ahead=0):
         return self.tokens[min(self.pos + ahead, len(self.tokens) - 1)]
@@ -339,7 +345,7 @@ class Parser:
 
     def identifier(self):
         t = self.next()
-        if t.kind != 'id' or t.value in SPECIFIERS:
+        if t.kind != 'id' or t.value in KEYWORDS:
             raise self.error('expected a name', t)
         return t.value
 
@@ -427,6 +433,7 @@ class Parser:
         return var
 
     def function_definition(self, ctype, name, line):
+        self.return_types[name] = ctype
         interrupt = '__interrupt' in getattr(self, 'qualifiers', ())
         typed, names = [], []
         if self.accept(')'):
@@ -487,6 +494,9 @@ class Parser:
         if not self.is_op('{'):
             raise self.error(f'expected the body of {name}')
         f.body = self.compound()
+        for jump in f.gotos:
+            if jump.name not in f.user_labels:
+                raise CompileError(f'line {jump.line}: label {jump.name} is not defined in {name}')
         self.function, self.scopes = None, []
 
     # statements
@@ -535,6 +545,54 @@ class Parser:
             return self.local_declaration()
         if t.kind == 'id':
             word = t.value
+            if word not in KEYWORDS and self.is_op(':', 1):
+                self.next()
+                self.expect(':')
+                if word in self.function.user_labels:
+                    raise self.error(f'label {word} is defined twice', t)
+                self.function.user_labels[word] = line
+                return Node('label', line, name=word, body=self.statement())
+            if word == 'goto':
+                self.next()
+                name = self.identifier()
+                self.expect(';')
+                jump = Node('goto', line, name=name)
+                self.function.gotos.append(jump)
+                return jump
+            if word == 'switch':
+                self.next()
+                self.expect('(')
+                c = self.expression()
+                self.expect(')')
+                if c.kind == 'str' or self.void_expression(c):
+                    raise self.error('switch needs an integer expression', t)
+                switch = Node('switch', line, c=c, cases=[], default=None)
+                self.switches.append(switch)
+                switch.body = self.statement()
+                self.switches.pop()
+                return switch
+            if word in ('case', 'default'):
+                self.next()
+                if not self.switches:
+                    raise self.error(f'{word} is not in a switch', t)
+                switch = self.switches[-1]
+                value = None
+                if word == 'case':
+                    value = fold(self.conditional())
+                    if value is None:
+                        raise self.error('case needs an integer constant expression', t)
+                    if any(case.value == value for case in switch.cases):
+                        raise self.error('duplicate case value', t)
+                elif switch.default is not None:
+                    raise self.error('duplicate default label', t)
+                self.expect(':')
+                case = Node('case', line, value=value)
+                if word == 'case':
+                    switch.cases.append(case)
+                else:
+                    switch.default = case
+                case.body = self.statement()
+                return case
             if word == 'if':
                 self.next()
                 self.expect('(')
@@ -588,8 +646,6 @@ class Parser:
                 e = None if self.is_op(';') else self.expression()
                 self.expect(';')
                 return Node('return', line, e=e)
-            if word in ('switch', 'case', 'default', 'goto', 'sizeof'):
-                raise self.error(f'{word} is not supported')
         e = self.expression()
         self.expect(';')
         return Node('expr', line, e=e)
@@ -656,7 +712,28 @@ class Parser:
                 self.expect(')')
                 return Node('cast', t.line, ctype=ctype, x=self.unary())
         if t.kind == 'id' and t.value == 'sizeof':
-            raise self.error('sizeof is not supported')
+            self.next()
+            if self.is_op('(') and self.peek(1).value in SPECIFIERS:
+                self.next()
+                qualifiers = self.qualifiers
+                ctype = self.specifiers()
+                self.qualifiers = qualifiers
+                length = 1
+                if self.accept('['):
+                    length = fold(self.conditional())
+                    if length is None or not 0 < length <= 0x7FFF:
+                        raise self.error('sizeof array needs a positive constant length', t)
+                    self.expect(']')
+                self.expect(')')
+                size = self.type_size(ctype, t) * length
+            else:
+                self.unevaluated += 1
+                operand = self.unary()
+                self.unevaluated -= 1
+                size = self.operand_size(operand, t)
+            if size > 0xFFFF:
+                raise self.error('sizeof result does not fit in 16 bits', t)
+            return Node('num', t.line, value=size, ctype='unsigned')
         return self.postfix(self.primary())
 
     def postfix(self, e):
@@ -674,9 +751,51 @@ class Parser:
                 self.lvalue(e, t)
                 e = Node('incdec', t.line, op=t.value, prefix=False, target=e)
             else:
-                if e.kind == 'var' and e.var.length is not None:
+                if e.kind == 'var' and e.var.length is not None and not self.unevaluated:
                     raise self.error(f'array {e.var.name} needs an index; pointers are not supported', t)
                 return e
+
+    def void_expression(self, e):
+        if e.kind == 'cast':
+            return e.ctype == 'void'
+        if e.kind == 'call':
+            return self.return_types.get(e.name) == 'void'
+        if e.kind == 'binary' and e.op == ',':
+            return self.void_expression(e.r)
+        if e.kind == 'cond':
+            return self.void_expression(e.a) or self.void_expression(e.b)
+        return False
+
+    def type_size(self, ctype, token):
+        if ctype == 'void':
+            raise self.error('sizeof cannot be applied to void', token)
+        return 2 if ctype in ('int', 'unsigned') else 1
+
+    def operand_size(self, e, token):
+        # No integer promotion for a bare object, cast, assignment or ++/--.
+        if self.void_expression(e):
+            raise self.error('sizeof cannot be applied to void', token)
+        if e.kind == 'str':
+            return len(e.data) + 1
+        if e.kind == 'var' and e.var.length is not None:
+            return self.type_size(e.var.ctype, token) * e.var.length
+        if any(n.kind == 'var' and n.var.length is not None for n in walk(e)):
+            raise self.error('pointers are not supported', token)
+        if e.kind in ('var', 'index'):
+            ctype = e.var.ctype
+        elif e.kind == 'cast':
+            ctype = e.ctype
+        elif e.kind in ('assign', 'incdec'):
+            return self.operand_size(e.target, token)
+        elif e.kind == 'binary' and e.op == ',':
+            if e.r.kind in ('str', 'var') and (e.r.kind == 'str' or e.r.var.length is not None):
+                raise self.error('pointers are not supported', token)
+            return self.operand_size(e.r, token)
+        elif e.kind == 'call':
+            ctype = self.return_types.get(e.name, 'int')
+        else:
+            ctype = etype(e)
+        return self.type_size(ctype, token)
 
     def lookup(self, name):
         for scope in reversed(self.scopes):
@@ -897,6 +1016,10 @@ def live_after_calls(f):
             for n in walk(e):
                 if n.kind == 'call':
                     live[id(n)] = later | around
+    if f.gotos:
+        # A backward jump can revisit any earlier read after a recursive call.
+        all_refs = set().union(*(references(e) for e in expressions(f.body)))
+        live = {call: refs | all_refs for call, refs in live.items()}
     return live
 
 
@@ -2378,6 +2501,7 @@ class Compiler:
             self.live = live_after_calls(f)
             self.function, self.depth, self.last_line, self.a_holds = f, 0, None, None
             self.incoming, self.falls = {}, True
+            f.jump_labels = {name: self.label() for name in f.user_labels}
             self.place(f.label)
             self.comment(f'{f.name}')
             self.statement(f.body)
@@ -3491,10 +3615,34 @@ class Compiler:
             self.place(test, True)
             self.branch(s.c, top, True)
             self.place(end, True)
+        elif kind == 'switch':
+            end = self.label()
+            for case in s.cases + ([s.default] if s.default is not None else []):
+                case.label = self.label()
+            self.gen(s.c)  # Once only; QEQ leaves the controlling value in A.
+            for case in s.cases:
+                self.load_b_const(case.value)
+                self.call('QEQ')
+                self.jcn(0xC, case.label)
+            self.jump(s.default.label if s.default is not None else end)
+            self.loops.append((end, None))
+            self.statement(s.body)
+            self.loops.pop()
+            self.place(end, True)
+        elif kind == 'case':
+            self.place(s.label)  # Dispatch and fallthrough meet here.
+            self.statement(s.body)
+        elif kind == 'label':
+            self.place(self.function.jump_labels[s.name])  # May have backward incoming jumps.
+            self.statement(s.body)
+        elif kind == 'goto':
+            self.jump(self.function.jump_labels[s.name])
         elif kind in ('break', 'continue'):
-            if not self.loops:
-                raise CompileError(f'line {s.line}: {kind} is not in a loop')
-            self.jump(self.loops[-1][0 if kind == 'break' else 1])
+            contexts = self.loops if kind == 'break' else [c for c in self.loops if c[1] is not None]
+            if not contexts:
+                raise CompileError(f'line {s.line}: {kind} is not in a loop' +
+                                   (' or switch' if kind == 'break' else ''))
+            self.jump(contexts[-1][0 if kind == 'break' else 1])
         elif kind == 'return':
             if s.e is not None:
                 if self.function.ctype == 'void':

@@ -31,8 +31,7 @@ of this repository.
 ## Build and run
 
 Building needs a C++11 compiler; the assembler and tests need Python 3.8 or
-newer. On Windows, use a Visual Studio 2019 or newer developer command prompt
-(the build uses `/Ob3` for more aggressive inlining).
+newer. On Windows, use a Visual Studio 2019 or newer developer command prompt.
 
 ```sh
 ./m.sh                          # Windows: m.bat
@@ -69,36 +68,18 @@ the usual way to stop a 4004, unless an `-I` interrupt can still be taken:
 then `HLT` waits for it, and a program may idle in a loop while its
 interrupts work. Ctrl-C or Ctrl-Q also exits.
 
-### Emulator throughput
+### Emulator execution
 
-Unthrottled 4004 execution uses a specialized loop with fixed register and
-ROM banks. It implements each of the 256 opcodes itself and keeps the CPU's
-state in local variables for a whole batch of instructions, so the compiler
-can hold the accumulator, carry, registers, program counter, stack and cycle
-count in machine registers. They go back to the CPU object only around the
-host's I/O callbacks and at the end of a batch. The 4040, instruction tracing
-(`-i`), and speed limiting (`-s`) use the reference loop, which `--reference`
-also selects. `tests/fast.py` runs seeded programs, page and cycle-limit edges,
-BASIC snapshots and 200 random 4 KB ROMs both ways, requiring the same output
-and final state.
-
-Five alternating runs of each executable, each limited to 100 million
-instruction cycles, on the development Linux machine (medians):
-
-| BASIC program | Reference loop | Earlier fast loop | Current fast loop | Gain over earlier |
-| --- | ---: | ---: | ---: | ---: |
-| e | 0.330 s | 0.143 s | 0.100 s | 1.43x |
-| sieve | 0.327 s | 0.142 s | 0.098 s | 1.45x |
-| ttt | 0.311 s | 0.133 s | 0.095 s | 1.40x |
-
-The earlier fast loop shared the reference CPU's instruction code and state.
-With Windows/MSVC it measured 2.26x (e), 2.20x (sieve), and 1.88x (ttt) the
-reference loop's speed; the current loop has not yet been measured there.
-Actual throughput depends on the host and compiler.
+Unthrottled 4004 execution uses a dedicated instruction loop. The 4040,
+instruction tracing (`-i`), and speed limiting (`-s`) use the reference loop,
+which `--reference` also selects for diagnostics. Both loops implement the
+same CPU behavior and instruction-cycle accounting. `tests/fast.py` checks
+that they produce identical output and final state.
 
 On the development Linux machine, complete BASIC benchmarks take about 0.9 s
-(e), 10.6 s (sieve), and 8.3 s (ttt). These are host execution times;
-emulated instruction-cycle counts and the hardware runtimes below are unchanged.
+(e), 10.6 s (sieve), and 8.3 s (ttt). These are host execution times and depend
+on the host and compiler. The benchmark tables below report instruction-cycle
+counts and estimated runtimes on 740 kHz hardware.
 
 ### The console
 
@@ -242,8 +223,16 @@ C without pointers, structures or floating point:
   to a status register. `__CC4__` is predefined, so a program can use
   `__nibble` only under this compiler.
 * Functions take parameters and return values, and may be recursive.
-* Every C statement except `switch` and `goto`, and every operator except
-  the pointer, member and `sizeof` operators.
+* Control flow includes `switch`/`case`/`default` with fallthrough, function-scoped
+  labels and `goto`, and `break`/`continue` in nested loops and switches.
+  Operators include `sizeof`; pointer and member operators remain unsupported.
+* `sizeof` is an unevaluated unsigned constant in 8-bit C bytes: `int` and
+  `unsigned` are 2, while `char`, `_Bool` and `__nibble` are 1. Array sizes
+  are the element count times that logical element size, so
+  `sizeof(a) / sizeof(a[0])` works even for packed Boolean and nibble arrays.
+  These logical sizes do not measure the compiler's physical RAM allocation.
+  Type names, fixed-size array types, expressions and string literals are
+  supported; pointers, variable-length arrays and `sizeof(void)` are not.
 * `putchar`, `getchar`, `puts`, and `printf` with a constant format and
   `%d`, `%u`, `%x`, `%c`, `%s` (a string constant) and `%%`.
 * Built-ins for the hardware, compiled inline: see [Hardware](#hardware).
@@ -259,19 +248,12 @@ MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
   registers for scalars (one holds the stack pointer) and 2,048 characters
   for arrays.
 * Arithmetic is done in R4–R7 and R8–R11 by a runtime library of small
-  routines, included only when used. The compiled code keeps track of which
-  variable R4–R7 holds, to skip reloading it.
-* Values known to fit in 0 to 255 are compared in 8 bits, inline, without
-  calling the library, and values that fit in 0 to 15 in 4 bits. Besides
-  `char`s, constants and comparisons, these include the `int` and `unsigned`
-  variables, parameters and functions that are only ever given such values,
-  which the compiler finds by elimination.
+  routines, included only when used.
 * The hardware stack has only three levels, so it is left to the runtime
   library. A C call stores a return number with the callee and jumps; a
   return jumps through a table of the call sites. A call that can reach the
   caller again first saves the caller's variables that are read after it,
-  on a stack in RAM, and restores them afterwards. An argument for a
-  parameter the function never uses is evaluated only for its side effects.
+  on a stack in RAM, and restores them afterwards.
 * `JCN` reaches only its own page, so the compiler places the code itself,
   using `JCN` with the opposite condition around a `JUN` for distant
   targets, and keeps each library routine and its tables on one page.
@@ -283,16 +265,16 @@ array, since 8,191 `char`s would need eight times the 4002s' memory. ttt's
 `main` takes no arguments, and its `ttype` is `__nibble` under this compiler
 and `char` elsewhere:
 
-| Program | ROM footprint | Instruction cycles | 740 kHz 4004 | Hand-written assembly |
-| --- | ---: | ---: | ---: | ---: |
-| [hello](examples/c/hello.c) | 90 bytes | 1,773 | 0.02 s | |
-| [e](examples/c/e.c) | 812 bytes | 29,482,644 | 319 s | 12.0 times as long |
-| [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s | 13.1 times |
-| [ttt](examples/c/ttt.c) | 1,688 bytes | 11,955,484 | 129 s | 14.3 times |
-| [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s | |
-| [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s | |
-| [maze](examples/c/maze.c) | 1,944 bytes | 460,917 | 4.98 s | |
-| [life](examples/c/life.c) | 2,306 bytes | 138,044,699 | 1,492 s | |
+| Program | ROM footprint | Instruction cycles | 740 kHz 4004 |
+| --- | ---: | ---: | ---: |
+| [hello](examples/c/hello.c) | 90 bytes | 1,773 | 0.02 s |
+| [e](examples/c/e.c) | 812 bytes | 29,482,644 | 319 s |
+| [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s |
+| [ttt](examples/c/ttt.c) | 1,688 bytes | 11,955,484 | 129 s |
+| [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s |
+| [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s |
+| [maze](examples/c/maze.c) | 1,944 bytes | 460,917 | 4.98 s |
+| [life](examples/c/life.c) | 2,306 bytes | 138,044,699 | 1,492 s |
 
 queens counts the 92 solutions to the eight queens problem by recursive
 backtracking, with packed `_Bool` arrays for the columns and diagonals, and
@@ -300,13 +282,6 @@ shows the first. hanoi prints the moves for three discs of the Towers of
 Hanoi and counts them for ten, recursing eleven deep. Like ttt, both use
 `__nibble` under this compiler and `char` elsewhere, and print what gcc's
 builds of the same sources print.
-
-The assembly e benchmark uses division specialized for its small quotients
-and a nibble lookup for multiplication by ten. C uses general arithmetic
-helpers and takes 12.0 times as many cycles. For ttt, each recursive call saves
-and restores five status registers (eight with `char`
-instead of `__nibble`), which the hand-written version avoids by keeping
-each depth's frame in its own RAM register.
 
 ### Maze generator and solver
 
@@ -385,46 +360,25 @@ changed-cell-only updates, pause/step/reset/quit, and cursor restoration. Both
 compiler profiles are checked, and a four-generation run is also compared with
 Intel's INTERP/4 without adding a long simulation to the test suite.
 
-### Smaller ROMs
+### Compiler profiles
 
-All builds remove unreachable instructions after unconditional jumps and jumps
-whose target is the next instruction. They also thread jumps: a jump to a label
-whose code only jumps on goes straight to the final target, and so does a
-conditional jump when that keeps it on its page. Labels remain entry points,
-including indirect software-call continuations and the 4040's fixed interrupt
-vector; other compiler labels nothing refers to are dropped.
-The regenerated examples above use this default mode.
+The default profile emits direct runtime-helper calls. `--size` shares
+repeated code through helper stubs to fit more code in ROM, at the cost of
+some extra instruction cycles. Both profiles use the same RAM allocation
+and respect the 4004's three-level hardware return stack. The BASIC
+interpreter requires `--size` to fit in 4 KB.
 
-`--size` makes three further changes, trading some runtime for ROM:
-
-* Comparisons of two bytes call `QEQ8`, `QGE8` or `QLE8` instead of comparing
-  both nibbles in place: four bytes instead of eight or ten.
-* Repeated `FIM 0,address` / `JMS helper` pairs, used at least three times,
-  share a small stub that tail-jumps to the helper.
-* Any other repeated run of straight-line code ending in a helper call is
-  outlined the same way, taking first the run that saves the most bytes. A
-  stub may call other helpers before its tail jump, but only while its
-  deepest call still fits the 4004's three-level return stack above the
-  compiled code; `tests/basic.py` checks each stub's depth independently.
-
-None of these changes RAM allocation. Each shared use adds a JMS and a BBL:
-
-| Program | Default ROM | `--size` ROM | ROM reduction | Extra cycles |
-| --- | ---: | ---: | ---: | ---: |
-| C TTT | 1,688 | 1,557 | 7.8% | 4.5% |
-| C queens | 1,146 | 1,052 | 8.2% | 3.9% |
-| C hanoi | 979 | 902 | 7.9% | 4.4% |
-| C e | 812 | 796 | 2.0% | 1.5% |
-| C sieve | 616 | 592 | 3.9% | 2.6% |
+| Program | Default ROM | `--size` ROM |
+| --- | ---: | ---: |
+| C TTT | 1,688 | 1,557 |
+| C queens | 1,146 | 1,052 |
+| C hanoi | 979 | 902 |
+| C e | 812 | 796 |
+| C sieve | 616 | 592 |
 
 ROM footprint is the highest occupied byte plus one, including runtime, data
-and placement gaps. Moving code can change short/long conditional-branch
-selection, so cycle differences also include those layout effects. The default
-cleanup changed the measured finite examples by less than 0.1% in cycles.
-Both C profiles are checked against the existing randomized model, recursion,
-console/hardware I/O and 4040 interrupts. The expanded BASIC interpreter uses
-`--size` and has its own tests, including all 192 digits of e. For other C
-programs, `--size` is optional; ordinary builds retain faster direct helper calls.
+and placement gaps. Both profiles are tested against the randomized C model,
+recursion, console and hardware I/O, and 4040 interrupts.
 
 ### Hardware
 
@@ -509,55 +463,15 @@ echo "Hello, world." | ./ntv4004 examples/echo.hex
 sieve, e and ttt are ports of the benchmarks in
 [ntv8008](https://github.com/davidly/ntv8008) and
 [cpm_compilers](https://github.com/davidly/cpm_compilers), and print exactly
-what those do. The 500 kHz 8008 takes 50.9, 19.0 and 15.4 seconds for them; at 740 kHz the
-4004 takes 45.6, 26.6 and 9.07.
-The 4004 is slower where it needs more than 4 bits at a time and faster
-where nibbles suffice:
+what those do.
 
-* **sieve** stores the 8,192 flags as bits, four to a 4002 RAM character,
-  using all eight banks. It keeps each index as its bank, character and bit,
-  with the bit times 4 in a nibble so additions carry from field to field.
-  The scan rotates each character's four flags out through the carry, and
-  skips a character with none set after one test. A flag's bit fixes the
-  prime's bit field and the carries into its character, so each bit has its
-  own entry to compute the prime and its first multiple. With no AND
-  instruction, a `FIN` table clears bits; its entries sit 40H apart so the
-  marking loops fit between them, as `FIN` reads its own page. The marking
-  loops keep the multiple's bit field in `FIN`'s index register and need no
-  `CLC`, since every way into them has the carry clear. Specialized loops for
-  primes below 64 and below 1024 update upper address fields and bank
-  selection only when a carry requires it. The prime count is binary, its
-  low nibble in a register, and is converted to decimal once. The original
-  ten-pass marking order, beginning at `I+P`, is preserved. This reduces
-  7,157,483 cycles to **4,220,640** (41.0% fewer), with ROM footprint
-  increasing from 590 to 695 bytes.
-* **e** keeps each 8-bit array element in two banks at the same character
-  address, ordering its accesses so each step switches banks twice. For
-  divisors of at least two, the spigot's quotient is at most nine, so the
-  division is ten unrolled subtractions; each adds the divisor's one's
-  complement with the carry in, so no `CLC` is needed, and each failure
-  exit already knows its quotient. The complement is kept as the divisor
-  counts down, rather than recomputed. Division by one only sets A(1) to
-  zero, so it is done after the loop, as is the initial output of 27.
-  Multiplication by ten looks up each nibble in a shared 16-byte ROM table
-  and combines the results, inline in the loop. These changes reduce the
-  benchmark from 10,285,867 to **2,458,025 cycles** (**4.18× faster**, 76.1%
-  fewer cycles), with ROM footprint growing from 316 to 475 bytes. All 192
-  digits and the `done.` output are unchanged; the image also matches
-  Intel's MAC4 and runs identically in INTERP/4.
-* **ttt** keeps one frame per search depth in the four status characters of
-  a RAM register, since the 4004's stack has only three levels, and every
-  score fits in a nibble. The board sits in RAM characters 7 to 15, so the
-  move register is the board address and `ISZ` both steps to the next cell
-  and ends the search after the last. Its binary node counter keeps the low
-  two nibbles in spare registers and converts to decimal once, when
-  printing. Direct win checks for each possible last move, reached through a
-  jump table, replace the pair-table loop, and jump straight back into the
-  search. Piece selection uses depth parity without branching, and placing a
-  piece falls into the child node. Ascending move order, the three draws,
-  and all **6493 nodes** are preserved. Runtime falls from 1,185,782 to
-  **838,584 cycles** (29.3% fewer). ROM footprint grows from 682 to 1196
-  bytes, within the original 4004's 4096-byte ROM.
+* **sieve** packs flags four to a RAM character across all eight RAM banks.
+  It marks odd multiples and reports the prime count after ten passes.
+* **e** stores 8-bit array elements across two RAM banks and uses integer
+  arithmetic to generate 192 digits from the factorial-series spigot.
+* **ttt** uses alpha-beta search over the three distinct opening moves,
+  visits 6493 nodes, and checks wins from the last move. Each search depth
+  has a frame in the status characters of a RAM register.
 
 Writing 4004 code: `SUB` and `SBM` subtract one more when the carry is 1,
 yet leave the carry 1 when there was no borrow, so complement it (`CMC`)
@@ -584,7 +498,8 @@ between the nibbles of a longer subtraction.
 * `tests/cc.py` compiles and runs 60 seeded random C programs, with every
   operator, assignment, branch and loop, and checks their output against a
   Python model of 16-bit C. It also runs programs for functions, recursion,
-  arrays, the library and the preprocessor, and the C examples, including maze
+  arrays, switch fallthrough and nesting, goto labels, unevaluated sizeof,
+  the library and the preprocessor, and the C examples, including maze
   connectivity and solution checks across several seeds. Life tests check
   displayed frames against an independent model, partial redraws, and controls.
 * `tests/basic.py` checks the native interpreter, generated ROM, storage limits,
