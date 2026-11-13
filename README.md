@@ -240,6 +240,9 @@ C without pointers, structures or floating point:
   Single-use leaf functions without user labels are inlined.
 * Control flow includes `switch`/`case`/`default` with fallthrough, function-scoped
   labels and `goto`, and `break`/`continue` in nested loops and switches.
+  In the default profile, switches on four-bit values with at least five
+  cases use a page-contained `JIN`/`JUN` jump table; smaller switches and
+  `--size` use comparisons.
   Operators include `sizeof`; pointer and member operators remain unsupported.
 * `sizeof` is an unevaluated unsigned constant in 8-bit C bytes: `int` and
   `unsigned` are 2, while `char`, `_Bool` and `__nibble` are 1. Array sizes
@@ -285,7 +288,7 @@ and `char` elsewhere:
 | [hello](examples/c/hello.c) | 90 bytes | 1,773 | 0.02 s |
 | [e](examples/c/e.c) | 647 bytes | 27,731,334 | 300 s |
 | [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s |
-| [ttt](examples/c/ttt.c) | 2,230 bytes | 6,252,494 | 67.6 s |
+| [ttt](examples/c/ttt.c) | 2,197 bytes | 6,068,035 | 65.6 s |
 | [queens](examples/c/queens.c) | 1,160 bytes | 5,146,369 | 55.6 s |
 | [hanoi](examples/c/hanoi.c) | 985 bytes | 1,149,826 | 12.4 s |
 | [maze](examples/c/maze.c) | 1,915 bytes | 447,627 | 4.84 s |
@@ -386,7 +389,7 @@ interpreter requires `--size` to fit in 4 KB.
 
 | Program | Default ROM | `--size` ROM |
 | --- | ---: | ---: |
-| C TTT | 2,230 | 1,972 |
+| C TTT | 2,197 | 1,972 |
 | C queens | 1,160 | 1,058 |
 | C hanoi | 985 | 902 |
 | C e | 647 | 638 |

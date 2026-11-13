@@ -119,70 +119,39 @@ MINMA:
         JMS QSTN0
 ; TTYPE X;
 ; SWITCH( MOVE )
-        LDM 0
-        XCH 0BH
-        CLC
+L0016:
         LD 7
-        SUB 0BH
-        JCN 0CH,$+4
+        CLC
+        RAL
+        XCH 1
+        TCC
+        XCH 0
+        LDM (T0016 AND 0FH)
+        ADD 1
+        XCH 1
+        TCC
+        ADD 0
+        XCH 0
+        LDM ((T0016 AND 0FFH)/16)
+        ADD 0
+        XCH 0
+        JIN 0
+T0016:
         JUN L0007
-        LDM 1
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,$+4
         JUN L0008
-        LDM 2
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,$+4
         JUN L0009
-        LDM 3
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,$+4
         JUN L0010
-        LDM 4
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,$+4
         JUN L0011
-        LDM 5
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,$+4
         JUN L0012
-        LDM 6
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,$+4
         JUN L0013
-        LDM 7
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,$+4
         JUN L0014
-        LDM 8
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        NOP
-        JCN 0CH,$+4
         JUN L0015
+        JUN L0006
+        JUN L0006
+        JUN L0006
+        JUN L0006
+        JUN L0006
+        JUN L0006
         JUN L0006
 ; CASE 0:
 L0007:
@@ -202,7 +171,8 @@ L0007:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0018
+        JCN 4,$+4
+        JUN L0019
         FIM 0,2
         LDM 0
         DCL
@@ -212,8 +182,8 @@ L0007:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0017
-L0018:
+        JCN 4,L0018
+L0019:
         FIM 0,3
         LDM 0
         DCL
@@ -223,7 +193,7 @@ L0018:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0019
+        JCN 0CH,L0020
         FIM 0,6
         LDM 0
         DCL
@@ -233,8 +203,8 @@ L0018:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0017
-L0019:
+        JCN 4,L0018
+L0020:
         FIM 0,4
         LDM 0
         DCL
@@ -244,7 +214,7 @@ L0019:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0016
+        JCN 0CH,L0017
         FIM 0,8
         LDM 0
         DCL
@@ -254,8 +224,8 @@ L0019:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0016
-L0017:
+        JCN 0CH,L0017
+L0018:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -264,7 +234,7 @@ L0017:
         LDM 0
         XCH 6
         JUN L0005
-L0016:
+L0017:
 ; BREAK;
         JUN L0006
 ; CASE 1:
@@ -285,7 +255,7 @@ L0008:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0022
+        JCN 0CH,L0023
         FIM 0,2
         LDM 0
         DCL
@@ -295,8 +265,8 @@ L0008:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0021
-L0022:
+        JCN 4,L0022
+L0023:
         FIM 0,4
         LDM 0
         DCL
@@ -306,7 +276,7 @@ L0022:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0020
+        JCN 0CH,L0021
         FIM 0,7
         LDM 0
         DCL
@@ -316,8 +286,8 @@ L0022:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0020
-L0021:
+        JCN 0CH,L0021
+L0022:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -326,7 +296,7 @@ L0021:
         LDM 0
         XCH 6
         JUN L0005
-L0020:
+L0021:
 ; BREAK;
         JUN L0006
 ; CASE 2:
@@ -347,7 +317,7 @@ L0009:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0025
+        JCN 0CH,L0026
         FIM 0,1
         LDM 0
         DCL
@@ -357,8 +327,8 @@ L0009:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0024
-L0025:
+        JCN 4,L0025
+L0026:
         FIM 0,5
         LDM 0
         DCL
@@ -368,7 +338,7 @@ L0025:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0026
+        JCN 0CH,L0027
         FIM 0,8
         LDM 0
         DCL
@@ -378,8 +348,8 @@ L0025:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0024
-L0026:
+        JCN 4,L0025
+L0027:
         FIM 0,4
         LDM 0
         DCL
@@ -389,7 +359,7 @@ L0026:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0023
+        JCN 0CH,L0024
         FIM 0,6
         LDM 0
         DCL
@@ -399,8 +369,8 @@ L0026:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0023
-L0024:
+        JCN 0CH,L0024
+L0025:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -409,7 +379,7 @@ L0024:
         LDM 0
         XCH 6
         JUN L0005
-L0023:
+L0024:
 ; BREAK;
         JUN L0006
 ; CASE 3:
@@ -430,7 +400,8 @@ L0010:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0029
+        JCN 4,$+4
+        JUN L0030
         FIM 0,5
         LDM 0
         DCL
@@ -440,8 +411,9 @@ L0010:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0028
-L0029:
+        JCN 0CH,$+4
+        JUN L0029
+L0030:
         FIM 0,0
         LDM 0
         DCL
@@ -451,7 +423,7 @@ L0029:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0027
+        JCN 0CH,L0028
         FIM 0,6
         LDM 0
         DCL
@@ -461,8 +433,8 @@ L0029:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0027
-L0028:
+        JCN 0CH,L0028
+L0029:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -471,7 +443,7 @@ L0028:
         LDM 0
         XCH 6
         JUN L0005
-L0027:
+L0028:
 ; BREAK;
         JUN L0006
 ; CASE 4:
@@ -492,7 +464,7 @@ L0011:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0032
+        JCN 0CH,L0033
         FIM 0,8
         LDM 0
         DCL
@@ -502,8 +474,8 @@ L0011:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0031
-L0032:
+        JCN 4,L0032
+L0033:
         FIM 0,2
         LDM 0
         DCL
@@ -513,7 +485,7 @@ L0032:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0033
+        JCN 0CH,L0034
         FIM 0,6
         LDM 0
         DCL
@@ -523,8 +495,8 @@ L0032:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0031
-L0033:
+        JCN 4,L0032
+L0034:
         FIM 0,1
         LDM 0
         DCL
@@ -534,7 +506,7 @@ L0033:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0034
+        JCN 0CH,L0035
         FIM 0,7
         LDM 0
         DCL
@@ -544,8 +516,8 @@ L0033:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0031
-L0034:
+        JCN 4,L0032
+L0035:
         FIM 0,3
         LDM 0
         DCL
@@ -555,7 +527,7 @@ L0034:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0030
+        JCN 0CH,L0031
         FIM 0,5
         LDM 0
         DCL
@@ -565,8 +537,8 @@ L0034:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0030
-L0031:
+        JCN 0CH,L0031
+L0032:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -575,7 +547,7 @@ L0031:
         LDM 0
         XCH 6
         JUN L0005
-L0030:
+L0031:
 ; BREAK;
         JUN L0006
 ; CASE 5:
@@ -596,7 +568,7 @@ L0012:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0037
+        JCN 0CH,L0038
         FIM 0,4
         LDM 0
         DCL
@@ -606,8 +578,8 @@ L0012:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0036
-L0037:
+        JCN 4,L0037
+L0038:
         FIM 0,2
         LDM 0
         DCL
@@ -617,7 +589,7 @@ L0037:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0035
+        JCN 0CH,L0036
         FIM 0,8
         LDM 0
         DCL
@@ -627,8 +599,8 @@ L0037:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0035
-L0036:
+        JCN 0CH,L0036
+L0037:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -637,7 +609,7 @@ L0036:
         LDM 0
         XCH 6
         JUN L0005
-L0035:
+L0036:
 ; BREAK;
         JUN L0006
 ; CASE 6:
@@ -659,7 +631,7 @@ L0013:
         CLC
         SUB 0CH
         JCN 4,$+4
-        JUN L0040
+        JUN L0041
         FIM 0,8
         LDM 0
         DCL
@@ -669,8 +641,9 @@ L0013:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0039
-L0040:
+        JCN 0CH,$+4
+        JUN L0040
+L0041:
         FIM 0,0
         LDM 0
         DCL
@@ -680,7 +653,7 @@ L0040:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0041
+        JCN 0CH,L0042
         FIM 0,3
         LDM 0
         DCL
@@ -690,8 +663,8 @@ L0040:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0039
-L0041:
+        JCN 4,L0040
+L0042:
         FIM 0,4
         LDM 0
         DCL
@@ -712,7 +685,7 @@ L0041:
         CLC
         SUB 0CH
         JCN 0CH,L0006
-L0039:
+L0040:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -721,7 +694,7 @@ L0039:
         LDM 0
         XCH 6
         JUN L0005
-L0038:
+L0039:
 ; BREAK;
         JUN L0006
 ; CASE 7:
@@ -742,7 +715,7 @@ L0014:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0044
+        JCN 0CH,L0045
         FIM 0,8
         LDM 0
         DCL
@@ -752,8 +725,8 @@ L0014:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0043
-L0044:
+        JCN 4,L0044
+L0045:
         FIM 0,1
         LDM 0
         DCL
@@ -774,7 +747,7 @@ L0044:
         CLC
         SUB 0CH
         JCN 0CH,L0006
-L0043:
+L0044:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -783,7 +756,7 @@ L0043:
         LDM 0
         XCH 6
         JUN L0005
-L0042:
+L0043:
 ; BREAK;
         JUN L0006
 ; CASE 8:
@@ -804,7 +777,7 @@ L0015:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0047
+        JCN 0CH,L0048
         FIM 0,7
         LDM 0
         DCL
@@ -814,8 +787,8 @@ L0015:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0046
-L0047:
+        JCN 4,L0047
+L0048:
         FIM 0,2
         LDM 0
         DCL
@@ -825,7 +798,7 @@ L0047:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0048
+        JCN 0CH,L0049
         FIM 0,5
         LDM 0
         DCL
@@ -835,8 +808,8 @@ L0047:
         LD 7
         CLC
         SUB 0CH
-        JCN 4,L0046
-L0048:
+        JCN 4,L0047
+L0049:
         FIM 0,0
         LDM 0
         DCL
@@ -846,7 +819,7 @@ L0048:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0045
+        JCN 0CH,L0046
         FIM 0,4
         LDM 0
         DCL
@@ -856,8 +829,8 @@ L0048:
         LD 7
         CLC
         SUB 0CH
-        JCN 0CH,L0045
-L0046:
+        JCN 0CH,L0046
+L0047:
 ; RETURN X;
         LDM 0
         XCH 4
@@ -866,7 +839,7 @@ L0046:
         LDM 0
         XCH 6
         JUN L0005
-L0045:
+L0046:
 ; BREAK;
 L0006:
 ; RETURN PIECEBLANK;
@@ -884,27 +857,26 @@ L0005:
 ; IF ( PIECEBLANK != P )
         LD 7
         JCN 0CH,$+4
-        JUN L0049
+        JUN L0050
 ; IF ( PIECEX == P )
         LDM 1
         XCH 0CH
         LD 7
         CLC
         SUB 0CH
-        JCN 4,$+4
-        JUN L0050
+        JCN 0CH,L0051
 ; RETURN SCOREWIN;
         FIM 4,0
         FIM 6,6
         FIM 0,070H
         JUN QRETF
-L0050:
+L0051:
 ; RETURN SCORELOSE;
         FIM 4,0
         FIM 6,4
         FIM 0,070H
         JUN QRETF
-L0049:
+L0050:
 ; IF ( 8 == DEPTH )
         LDM 8
         XCH 0CH
@@ -915,13 +887,13 @@ L0049:
         RD2
         CLC
         SUB 0CH
-        JCN 0CH,L0051
+        JCN 0CH,L0052
 ; RETURN SCORETIE;
         FIM 4,0
         FIM 6,5
         FIM 0,070H
         JUN QRETF
-L0051:
+L0052:
 L0004:
 ; IF (DEPTH & 1)
         FIM 0,080H
@@ -930,8 +902,7 @@ L0004:
         SRC 0
         RD2
         RAR
-        JCN 2,$+4
-        JUN L0052
+        JCN 0AH,L0053
 ; VALUE = SCOREMIN;
         FIM 4,0
         FIM 6,2
@@ -942,8 +913,8 @@ L0004:
         FIM 6,0
         FIM 0,090H
         JMS QSTN1
-        JUN L0054
-L0053:
+        JUN L0055
+L0054:
 ; IF (PIECEBLANK == G?BOARD(P))
         FIM 0,090H
         LD 1
@@ -957,7 +928,7 @@ L0053:
         DCL
         SRC 0
         RDM
-        JCN 0CH,L0057
+        JCN 0CH,L0058
 ; G?BOARD(P) = PIECEX;
         FIM 0,090H
         JMS QLDN1
@@ -982,7 +953,7 @@ L0053:
         FIM 0,070H
         JMS QSTAC
         JUN MINMA
-L0058:
+L0059:
         FIM 0,070H
         FIM 2,0F4H
         LDM 0DH
@@ -1006,12 +977,12 @@ L0058:
         RD0
         CLC
         SUB 0CH
-        JCN 0CH,L0059
+        JCN 0CH,L0060
         FIM 4,0
         FIM 6,6
         FIM 0,070H
         JUN QRETF
-L0059:
+L0060:
 ; IF (SCORE > VALUE)
         FIM 0,090H
         LD 1
@@ -1026,7 +997,7 @@ L0059:
         RD2
         CLC
         SUB 0CH
-        JCN 2,L0060
+        JCN 2,L0061
 ; VALUE = SCORE;
         FIM 0,090H
         JMS QLDN0
@@ -1042,10 +1013,10 @@ L0059:
         LD 7
         CLC
         SUB 0CH
-        JCN 0AH,L0061
+        JCN 0AH,L0062
         FIM 0,070H
         JUN QRETF
-L0061:
+L0062:
 ; IF (VALUE > ALPHA) ALPHA = VALUE;
         LD 7
         XCH 0CH
@@ -1056,12 +1027,12 @@ L0061:
         RD0
         CLC
         SUB 0CH
-        JCN 2,L0062
+        JCN 2,L0063
         FIM 0,080H
         JMS QSTN0
-L0062:
-L0060:
-L0057:
+L0063:
+L0061:
+L0058:
         FIM 0,090H
         LD 1
         DCL
@@ -1069,7 +1040,7 @@ L0057:
         RD1
         IAC
         WR1
-L0054:
+L0055:
         LDM 9
         XCH 0CH
         FIM 0,090H
@@ -1079,14 +1050,13 @@ L0054:
         RD1
         CLC
         SUB 0CH
-        JCN 2,$+4
-        JUN L0053
+        JCN 0AH,L0054
 ; RETURN VALUE;
         FIM 0,090H
         JMS QLDN2
         FIM 0,070H
         JUN QRETF
-L0052:
+L0053:
 ; VALUE = SCOREMAX;
         FIM 4,0
         FIM 6,9
@@ -1097,8 +1067,8 @@ L0052:
         FIM 6,0
         FIM 0,090H
         JMS QSTN1
-        JUN L0064
-L0063:
+        JUN L0065
+L0064:
 ; IF (PIECEBLANK == G?BOARD(P))
         FIM 0,090H
         LD 1
@@ -1112,7 +1082,7 @@ L0063:
         DCL
         SRC 0
         RDM
-        JCN 0CH,L0067
+        JCN 0CH,L0068
 ; G?BOARD(P) = PIECEO;
         FIM 0,090H
         JMS QLDN1
@@ -1137,7 +1107,7 @@ L0063:
         FIM 0,070H
         JMS QSTAC
         JUN MINMA
-L0068:
+L0069:
         FIM 0,070H
         FIM 2,0F4H
         LDM 0DH
@@ -1161,12 +1131,12 @@ L0068:
         RD0
         CLC
         SUB 0CH
-        JCN 0CH,L0069
+        JCN 0CH,L0070
         FIM 4,0
         FIM 6,4
         FIM 0,070H
         JUN QRETF
-L0069:
+L0070:
 ; IF (SCORE < VALUE)
         FIM 0,090H
         LD 1
@@ -1181,7 +1151,7 @@ L0069:
         RD0
         CLC
         SUB 0CH
-        JCN 2,L0070
+        JCN 2,L0071
 ; VALUE = SCORE;
         FIM 0,090H
         JMS QLDN0
@@ -1197,10 +1167,10 @@ L0069:
         RD0
         CLC
         SUB 0CH
-        JCN 0AH,L0071
+        JCN 0AH,L0072
         FIM 0,070H
         JUN QRETF
-L0071:
+L0072:
 ; IF (VALUE < BETA) BETA = VALUE;
         FIM 0,080H
         LD 1
@@ -1211,12 +1181,12 @@ L0071:
         LD 7
         CLC
         SUB 0CH
-        JCN 2,L0072
+        JCN 2,L0073
         FIM 0,080H
         JMS QSTN1
-L0072:
-L0070:
-L0067:
+L0073:
+L0071:
+L0068:
         FIM 0,090H
         LD 1
         DCL
@@ -1224,7 +1194,7 @@ L0067:
         RD1
         IAC
         WR1
-L0064:
+L0065:
         LDM 9
         XCH 0CH
         FIM 0,090H
@@ -1234,7 +1204,8 @@ L0064:
         RD1
         CLC
         SUB 0CH
-        JCN 0AH,L0063
+        JCN 2,$+4
+        JUN L0064
 ; RETURN VALUE;
         FIM 0,090H
         JMS QLDN2
@@ -1248,8 +1219,8 @@ FINDS:
         FIM 6,0
         FIM 0,0C0H
         JMS QSTA
-        JUN L0074
-L0073:
+        JUN L0075
+L0074:
 ; G?BOARD( I ) = PIECEBLANK;
         FIM 0,0C0H
         JMS QLDA
@@ -1258,11 +1229,11 @@ L0073:
         JMS QSTIN
         FIM 0,0C0H
         JMS QINCV
-L0074:
+L0075:
         FIM 8,0
         FIM 0AH,9
         JMS QSLT
-        JCN 0CH,L0073
+        JCN 0CH,L0074
 ; G?BOARD( POSITION ) = PIECEX;
         FIM 0,0B0H
         JMS QLDN0
@@ -1274,8 +1245,8 @@ L0074:
         FIM 6,0
         FIM 0,0C0H
         JMS QSTA
-        JUN L0078
-L0077:
+        JUN L0079
+L0078:
 ; G?IMOVES = 0;
         FIM 4,0
         FIM 6,0
@@ -1302,21 +1273,21 @@ L0077:
         FIM 0,070H
         JMS QSTAC
         JUN MINMA
-L0081:
+L0082:
         FIM 0,0C0H
         JMS QINCV
-L0078:
+L0079:
         FIM 0,010H
         JMS QLDB
         JMS QSLT
         JCN 4,$+4
-        JUN L0077
+        JUN L0078
 ; RETURN G?IMOVES;
         FIM 0,020H
         JMS QLDA
         FIM 0,0A0H
         JUN QRETF
-        ORG 0653H
+        ORG 0633H
 ; THE SAVE STACK, FOR RECURSION: ITS POINTER IS IN STATUS REGISTER 0 OF
 ; BANK 0 (BANK, REGISTER, CHARACTER IN STATUS CHARACTERS 1 TO 3), AND EACH
 ; SAVED STATUS REGISTER TAKES 4 CHARACTERS OF MAIN MEMORY.
@@ -1427,7 +1398,62 @@ QSSP:   FIM 8,00H
         LD 15
         WR3
         BBL 0
-        ORG 06CAH
+        ORG 06AAH
+; COMPARE A WITH B, RETURNING 1 OR 0 IN THE ACCUMULATOR. THE SIGNED
+; COMPARISONS FLIP THE SIGN BITS AND COMPARE UNSIGNED.
+QSLT:   JMS QFLIP
+QULT:   JMS QCMP
+        JCN 2,QCF
+QCT:    BBL 1
+QSGE:   JMS QFLIP
+QUGE:   JMS QCMP
+        JCN 2,QCT
+QCF:    BBL 0
+QSGT:   JMS QFLIP
+QUGT:   JMS QCMPR
+        JCN 2,QCF
+        BBL 1
+QSLE:   JMS QFLIP
+QULE:   JMS QCMPR
+        JCN 2,QCT
+        BBL 0
+QFLIP:  CLC
+        LDM 8
+        ADD 4
+        XCH 4
+        CLC
+        LDM 8
+        ADD 8
+        XCH 8
+        BBL 0
+; THE CARRY IS 1 IF A >= B (QCMP) OR B >= A (QCMPR).
+QCMP:   CLC
+        LD 7
+        SUB 11
+        CMC
+        LD 6
+        SUB 10
+        CMC
+        LD 5
+        SUB 9
+        CMC
+        LD 4
+        SUB 8
+        BBL 0
+QCMPR:  CLC
+        LD 11
+        SUB 7
+        CMC
+        LD 10
+        SUB 6
+        CMC
+        LD 9
+        SUB 5
+        CMC
+        LD 8
+        SUB 4
+        BBL 0
+        ORG 06E9H
 ; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
 QCLR:   LDM 0
         XCH 12
@@ -1446,40 +1472,9 @@ QCLC:   SRC 0
         INC 12
         ISZ 13,QCLB
         BBL 0
-        ORG 06DFH
-; A = -A, OR A = A + 1.
-QNEG:   LD 4
-        CMA
-        XCH 4
-        LD 5
-        CMA
-        XCH 5
-        LD 6
-        CMA
-        XCH 6
-        LD 7
-        CMA
-        XCH 7
-QINC:   ISZ 7,QINCX
-        ISZ 6,QINCX
-        ISZ 5,QINCX
-        INC 4
-QINCX:  BBL 0
-        ORG 06F3H
-; EXCHANGE A AND B.
-QXAB:   LD 4
-        XCH 8
-        XCH 4
-        LD 5
-        XCH 9
-        XCH 5
-        LD 6
-        XCH 10
-        XCH 6
-        LD 7
-        XCH 11
-        XCH 7
-        BBL 0
+        ORG 06FEH
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
         ORG 0700H
 ; RETURN FROM A FUNCTION: R0R1 ADDRESSES ITS RETURN NUMBER, AN OFFSET
 ; INTO THE TABLE OF JUMPS THAT FOLLOWS ON THIS PAGE.
@@ -1489,9 +1484,9 @@ QRETF:  JMS QLDR
         JUN L0001
         JUN L0002
         JUN L0003
-        JUN L0058
-        JUN L0068
-        JUN L0081
+        JUN L0059
+        JUN L0069
+        JUN L0082
 QLDR:   LD 1
         DCL
         SRC 0
@@ -1578,61 +1573,6 @@ QPDP:   LDM 1
         WRR
 QPDX:   BBL 0
         ORG 0776H
-; COMPARE A WITH B, RETURNING 1 OR 0 IN THE ACCUMULATOR. THE SIGNED
-; COMPARISONS FLIP THE SIGN BITS AND COMPARE UNSIGNED.
-QSLT:   JMS QFLIP
-QULT:   JMS QCMP
-        JCN 2,QCF
-QCT:    BBL 1
-QSGE:   JMS QFLIP
-QUGE:   JMS QCMP
-        JCN 2,QCT
-QCF:    BBL 0
-QSGT:   JMS QFLIP
-QUGT:   JMS QCMPR
-        JCN 2,QCF
-        BBL 1
-QSLE:   JMS QFLIP
-QULE:   JMS QCMPR
-        JCN 2,QCT
-        BBL 0
-QFLIP:  CLC
-        LDM 8
-        ADD 4
-        XCH 4
-        CLC
-        LDM 8
-        ADD 8
-        XCH 8
-        BBL 0
-; THE CARRY IS 1 IF A >= B (QCMP) OR B >= A (QCMPR).
-QCMP:   CLC
-        LD 7
-        SUB 11
-        CMC
-        LD 6
-        SUB 10
-        CMC
-        LD 5
-        SUB 9
-        CMC
-        LD 4
-        SUB 8
-        BBL 0
-QCMPR:  CLC
-        LD 11
-        SUB 7
-        CMC
-        LD 10
-        SUB 6
-        CMC
-        LD 9
-        SUB 5
-        CMC
-        LD 8
-        SUB 4
-        BBL 0
-        ORG 07B5H
 ; PRINT THE STRING AT R0R1 ON THIS PAGE.
 QS1:   FIM 14,0F0H
         SRC 14
@@ -1655,7 +1595,26 @@ S0001:
 S0002:
         DB 069H,074H,065H,072H,061H,074H,069H,06FH,06EH,020H,063H,06FH
         DB 075H,06EH,074H,03AH,020H,0
-        ORG 07EDH
+        ORG 07AEH
+; A = -A, OR A = A + 1.
+QNEG:   LD 4
+        CMA
+        XCH 4
+        LD 5
+        CMA
+        XCH 5
+        LD 6
+        CMA
+        XCH 6
+        LD 7
+        CMA
+        XCH 7
+QINC:   ISZ 7,QINCX
+        ISZ 6,QINCX
+        ISZ 5,QINCX
+        INC 4
+QINCX:  BBL 0
+        ORG 07C2H
 ; STORE B'S LOW NIBBLE AT MAIN-MEMORY ADDRESS A; A = THAT NIBBLE.
 QSTIN:  LD 5
         DCL
@@ -1675,7 +1634,7 @@ QSTIN:  LD 5
         LDM 0
         XCH 4
         BBL 0
-        ORG 0800H
+        ORG 07D4H
 ; A = THE __NIBBLE AT MAIN-MEMORY ADDRESS A.
 QLDIN:  LD 5
         DCL
@@ -1693,7 +1652,7 @@ QLDIN:  LD 5
         LDM 0
         XCH 4
         BBL 0
-        ORG 0810H
+        ORG 07E4H
 ; STORE A, OR ITS LOW BYTE, IN THE STATUS REGISTER AT R0R1.
 QSTAC:  LDM 0
         XCH 4
@@ -1711,7 +1670,21 @@ QSTA:   LD 1
         LD 7
         WR3
         BBL 0
-        ORG 0820H
+        ORG 07F4H
+; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
+QLDA:   LD 1
+        DCL
+        SRC 0
+        RD0
+        XCH 4
+        RD1
+        XCH 5
+        RD2
+        XCH 6
+        RD3
+        XCH 7
+        BBL 0
+        ORG 0800H
 ; A = A + B.
 QADD:   CLC
         LD 7
@@ -1727,21 +1700,22 @@ QADD:   CLC
         ADD 8
         XCH 4
         BBL 0
-        ORG 082EH
-; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
-QLDA:   LD 1
-        DCL
-        SRC 0
-        RD0
+        ORG 080EH
+; EXCHANGE A AND B.
+QXAB:   LD 4
+        XCH 8
         XCH 4
-        RD1
+        LD 5
+        XCH 9
         XCH 5
-        RD2
+        LD 6
+        XCH 10
         XCH 6
-        RD3
+        LD 7
+        XCH 11
         XCH 7
         BBL 0
-        ORG 083AH
+        ORG 081BH
 ; B = THE STATUS REGISTER AT R0R1.
 QLDB:   LD 1
         DCL
@@ -1755,7 +1729,7 @@ QLDB:   LD 1
         RD3
         XCH 11
         BBL 0
-        ORG 0846H
+        ORG 0827H
 ; A = STATUS CHARACTER 0 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN0:  LD 1
         DCL
@@ -1769,7 +1743,7 @@ QLDN0:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0852H
+        ORG 0833H
 ; A = STATUS CHARACTER 1 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN1:  LD 1
         DCL
@@ -1783,7 +1757,7 @@ QLDN1:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 085EH
+        ORG 083FH
 ; A = STATUS CHARACTER 2 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN2:  LD 1
         DCL
@@ -1797,7 +1771,7 @@ QLDN2:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 086AH
+        ORG 084BH
 ; A = STATUS CHARACTER 3 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN3:  LD 1
         DCL
@@ -1811,7 +1785,7 @@ QLDN3:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0876H
+        ORG 0857H
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 0 AT R0R1; A = THAT NIBBLE.
 QSTN0:  LD 1
         DCL
@@ -1825,7 +1799,7 @@ QSTN0:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0882H
+        ORG 0863H
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 1 AT R0R1; A = THAT NIBBLE.
 QSTN1:  LD 1
         DCL
@@ -1839,7 +1813,7 @@ QSTN1:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 088EH
+        ORG 086FH
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 2 AT R0R1; A = THAT NIBBLE.
 QSTN2:  LD 1
         DCL
@@ -1853,7 +1827,7 @@ QSTN2:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 089AH
+        ORG 087BH
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 3 AT R0R1; A = THAT NIBBLE.
 QSTN3:  LD 1
         DCL
@@ -1867,7 +1841,7 @@ QSTN3:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 08A6H
+        ORG 0887H
 ; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
 QPUTC:  FIM 14,0F0H
         SRC 14
@@ -1876,12 +1850,9 @@ QPUTC:  FIM 14,0F0H
         LD 7
         WRR
         BBL 0
-        ORG 08AEH
+        ORG 088FH
 ; INCREMENT THE INT AT R0R1, LEAVING IT IN A.
 QINCV:  JMS QLDA
         JMS QINC
         JUN QSTA
-        ORG 08B4H
-; THE END OF THE PROGRAM: A JUMP TO ITSELF.
-QEXIT:  JUN QEXIT
         END

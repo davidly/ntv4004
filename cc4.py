@@ -3748,9 +3748,21 @@ class Compiler:
             end = self.label()
             for case in s.cases + ([s.default] if s.default is not None else []):
                 case.label = self.label()
-            nibble = self.narrow(s.c, 4) and all(case.value < 16 for case in s.cases)
+            nibble = self.narrow(s.c, 4) and all(0 <= case.value < 16 for case in s.cases)
             self.gen(s.c)  # Once only; comparisons preserve R4-R7.
-            for case in s.cases:
+            # Sixteen entries cover every nibble, including holes/default.
+            # Keep small switches and the compact profile as comparisons.
+            table = nibble and not self.size and len(s.cases) >= 5
+            if table:
+                default = s.default.label if s.default is not None else end
+                targets = dict((case.value, case.label) for case in s.cases)
+                entries = tuple(targets.get(n, default) for n in range(16))
+                self.code.append(('table', self.label(), entries))
+                for target in set(entries):
+                    self.incoming.setdefault(target, []).append(None)
+                self.a_holds = None
+                self.falls = False
+            for case in ([] if table else s.cases):
                 if nibble:
                     self.op('LDM', case.value)
                     self.op('XCH', 11)
@@ -3762,7 +3774,8 @@ class Compiler:
                     self.load_b_const(case.value)
                     self.call('QEQ')
                     self.jcn(0xC, case.label)
-            self.jump(s.default.label if s.default is not None else end)
+            if not table:
+                self.jump(s.default.label if s.default is not None else end)
             self.loops.append((end, None))
             self.statement(s.body)
             self.loops.pop()
@@ -3937,8 +3950,11 @@ class Compiler:
             final = cls.jump_targets(items)
             items = [('op', 'JUN', (final.get(item[2][0], item[2][0]),)) if item[:2] == ('op', 'JUN') else item
                      for item in items]
-            referenced = set(keep) | {item[2] for item in items if item[0] == 'jcn'} | {
-                o for item in items if item[0] == 'op' for o in item[2] if isinstance(o, str)}
+            referenced = (set(keep)
+                          | {target for item in items if item[0] == 'table' for target in item[2]}
+                          | {item[2] for item in items if item[0] == 'jcn'}
+                          | {o for item in items if item[0] == 'op'
+                             for o in item[2] if isinstance(o, str)})
             items = [item for item in items
                      if not (item[0] == 'label' and re.fullmatch(r'L\d{4}', item[1]) and item[1] not in referenced)]
             result = []
@@ -3983,6 +3999,11 @@ class Compiler:
                     labels[item[1]] = address
                 elif item[0] == 'op':
                     address += 2 if item[1] in TWO_BYTES else 1
+                elif item[0] == 'table':
+                    # Sixteen dispatcher bytes plus sixteen two-byte JUN entries.
+                    pads[i] = (((address + 2 + 255) & ~255) - address
+                               if (address & 255) + 48 > 256 else 0)
+                    address += pads[i] + 48
                 elif item[0] == 'jcn':
                     if i in long:  # JCN NOT,$+4 / JUN: both bytes after the JCN must share its page
                         pads[i] = 0x100 - ((address + 2) & 0xFF) if (address + 2) & 0xFF >= 0xFE else 0
@@ -4015,6 +4036,18 @@ class Compiler:
                 lines.append(f'{item[1]}:')
             elif item[0] == 'comment':
                 lines.append(sanitize('; ' + item[1]))
+            elif item[0] == 'table':
+                label = item[1]
+                if pads[i]:
+                    lines.append(f'        JUN {label}')
+                    lines += ['        NOP'] * (pads[i] - 2)
+                lines += [f'{label}:', '        LD 7', '        CLC', '        RAL',
+                          '        XCH 1', '        TCC', '        XCH 0',
+                          f'        LDM (T{label[1:]} AND 0FH)', '        ADD 1',
+                          '        XCH 1', '        TCC', '        ADD 0', '        XCH 0',
+                          f'        LDM ((T{label[1:]} AND 0FFH)/16)',
+                          '        ADD 0', '        XCH 0', '        JIN 0', f'T{label[1:]}:']
+                lines += [f'        JUN {target}' for target in item[2]]
             elif item[0] == 'op':
                 operands = ','.join(o if isinstance(o, str) else number(o.address() if isinstance(o, Slot) else o)
                                     for o in item[2])

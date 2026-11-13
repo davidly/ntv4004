@@ -791,6 +791,61 @@ __interrupt void tick(void)
                 cc4.compile_source(source, cpu=cpu, size=SIZE)
             self.assertIn(message, str(caught.exception))
 
+    def test_nibble_switch_table(self):
+        # Exercise carry from doubling indices 8..15, holes, fallthrough,
+        # no default, and exactly-once evaluation of a volatile operand.
+        source = r"""
+volatile __nibble n;
+int main() {
+    int i, value;
+    for (i = 0; i < 16; i++) {
+        n = i;
+        value = 100;
+        switch (n++) {
+            case 0: value = 1; break;
+            case 2: value = 2;
+            case 3: value += 3; break;
+            case 8: value = 8; break;
+            case 15: value = 15; break;
+            default: value = 99;
+        }
+        printf("%d %u\n", value, n);
+        value = 100;
+        switch ((__nibble)i) {
+            case 0: case 1: case 2: case 3: case 15: value = i;
+        }
+        printf("%d\n", value);
+    }
+    return 0;
+}
+"""
+        expected = ''.join(f'{dict([(0,1),(2,5),(3,103),(8,8),(15,15)]).get(i,99)} {(i+1)%16}\n'
+                           f'{i if i in (0,1,2,3,15) else 100}\n' for i in range(16))
+        self.assertEqual(run_c(source), expected)
+        handler = 'unsigned churn; __interrupt void tick(void) { churn++; }\n'
+        interrupting = handler + source.replace('int main() {', 'int main() { __ei();', 1)
+        self.assertEqual(run_c(interrupting, options=('-I:499',), cpu='4040'), expected)
+        assembly, _ = cc4.compile_source(source, size=SIZE)
+        self.assertEqual('JIN 0' in assembly, not SIZE)
+
+    def test_switch_table_page_layout(self):
+        # Try every starting offset: the complete dispatch and all sixteen
+        # targets must share JIN's page.
+        for offset in range(256):
+            compiler = cc4.Compiler('int main() { return 0; }')
+            compiler.handler = None
+            compiler.code = [('op', 'NOP', ())] * offset + [
+                ('table', 'L9000', ('L9001',) * 16),
+                ('label', 'L9001'), ('op', 'JUN', ('L9001',))]
+            assembly = compiler.output()
+            memory, symbols, _ = asm4.Assembler().assemble(assembly)
+            start, table = symbols['L9000'], symbols['T9000']
+            self.assertEqual(table, start + 16)
+            self.assertEqual(start >> 8, (table + 31) >> 8)
+            self.assertEqual((start + 16) >> 8, table >> 8)
+            self.assertEqual(compiler.code_size, table + 34)
+            self.assertEqual(memory[table], 0x40 | (symbols['L9001'] >> 8))
+
     def test_switch(self):
         source = r"""
 int calls;
