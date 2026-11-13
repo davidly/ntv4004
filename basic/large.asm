@@ -150,6 +150,7 @@ DESTI:
         JCN 0AH,L0014
         JMS QV088
         JCN 0AH,L0014
+; POS++;
         JMS QV076
         FIM 0,012H
         JUN QRETF
@@ -253,10 +254,11 @@ ATOM:
         JMS QV077
         JUN L0023
 L0024:
-; ELSE IF (CH == '@') VALUE = VARS(DESTINATION());
+; ELSE IF (CH == '@') (
         FIM 0AH,040H
         JMS QEQ8
         JCN 4,L0026
+; VALUE = VARS(DESTINATION());
         FIM 6,0EH
         FIM 0,012H
         JMS QSTAC
@@ -990,6 +992,7 @@ L0131:
         JMS QV083
         LD 7
         JCN 0CH,L0127
+; VARS(VARIABLE) = VALUE;
         FIM 0,014H
         JMS QLDA
         JMS QV045

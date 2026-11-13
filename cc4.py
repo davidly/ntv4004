@@ -3619,11 +3619,20 @@ class Compiler:
             end = self.label()
             for case in s.cases + ([s.default] if s.default is not None else []):
                 case.label = self.label()
-            self.gen(s.c)  # Once only; QEQ leaves the controlling value in A.
+            nibble = self.narrow(s.c, 4) and all(case.value < 16 for case in s.cases)
+            self.gen(s.c)  # Once only; comparisons preserve R4-R7.
             for case in s.cases:
-                self.load_b_const(case.value)
-                self.call('QEQ')
-                self.jcn(0xC, case.label)
+                if nibble:
+                    self.op('LDM', case.value)
+                    self.op('XCH', 11)
+                    self.op('CLC')
+                    self.op('LD', 7)
+                    self.op('SUB', 11)
+                    self.jcn(4, case.label)
+                else:
+                    self.load_b_const(case.value)
+                    self.call('QEQ')
+                    self.jcn(0xC, case.label)
             self.jump(s.default.label if s.default is not None else end)
             self.loops.append((end, None))
             self.statement(s.body)

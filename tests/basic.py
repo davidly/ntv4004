@@ -18,6 +18,11 @@ IMAGE = ROOT / 'basic/basic.hex'
 
 
 class Basic(unittest.TestCase):
+    banner = 'BASIC4'
+    byte_array = False
+    program_lines = 32
+    program_bytes = 384
+
     @classmethod
     def setUpClass(cls):
         cls.image = IMAGE
@@ -32,15 +37,17 @@ class Basic(unittest.TestCase):
         return result.stdout.decode('ascii').replace('\r\n', '\n')
 
     def check(self, program, expected):
-        self.assertEqual(self.execute(program), 'BASIC4\n'+expected)
+        self.assertEqual(self.execute(program), self.banner+'\n'+expected)
 
     def test_rebuild_and_hardware_limits(self):
         source = ROOT / 'basic/basic.c'
-        assembly, compiler = cc4.compile_source(source.read_text(), source.stem, size=True)
+        name = 'byte' if self.byte_array else 'basic'
+        text = ('#define BYTE_ARRAY 1\n' if self.byte_array else '')+source.read_text()
+        assembly, compiler = cc4.compile_source(text, name, size=True)
         memory, symbols, _ = asm4.Assembler('4004').assemble(assembly)
-        self.assertEqual(assembly, source.with_suffix('.asm').read_text())
-        self.assertEqual(asm4.hex_file(memory), IMAGE.read_text())
-        self.assertEqual(asm4.map_file(symbols), source.with_suffix('.map').read_text())
+        self.assertEqual(assembly, source.with_name(name+'.asm').read_text())
+        self.assertEqual(asm4.hex_file(memory), self.image.read_text())
+        self.assertEqual(asm4.map_file(symbols), source.with_name(name+'.map').read_text())
         self.assertLessEqual(compiler.rom_end, 4096)
         self.assertLessEqual(compiler.memory_top, 2048)
         self.assertLessEqual(compiler.slots_used, 128)
@@ -64,13 +71,13 @@ class Basic(unittest.TestCase):
         self.assertEqual(primes, 1899)
         self.check_program_limits(source)
         self.assertEqual(self.execute(source, budget=12_000_000_000, timeout=300),
-                         f'BASIC4\n{primes} primes.\n')
+                         f'{self.banner}\n{primes} primes.\n')
 
     def check_program_limits(self, source):
         lines = source.splitlines()
         self.assertEqual(lines[-1], 'RUN')
-        self.assertLessEqual(len(lines)-1, 32)
-        self.assertLessEqual(sum(len(line.split(' ',1)[1])+1 for line in lines[:-1]), 384)
+        self.assertLessEqual(len(lines)-1, self.program_lines)
+        self.assertLessEqual(sum(len(line.split(' ',1)[1])+1 for line in lines[:-1]), self.program_bytes)
 
     def test_sieve_segment_boundaries(self):
         source = (ROOT/'basic/examples/sieve.bas').read_text()
@@ -80,7 +87,7 @@ class Basic(unittest.TestCase):
                            for n in range(3, 2*count+2, 2))
             with self.subTest(count=count):
                 self.assertEqual(self.execute(program, budget=100_000_000),
-                                 f'BASIC4\n{expected} primes.\n')
+                                 f'{self.banner}\n{expected} primes.\n')
 
     def test_e_spigot(self):
         from decimal import Decimal, localcontext
@@ -90,7 +97,7 @@ class Basic(unittest.TestCase):
             context.prec = 220
             digits = str(Decimal(1).exp()).replace('.', '')[:192]
         self.assertEqual(self.execute(source, budget=1_200_000_000),
-                         'BASIC4\n'+digits+'\ndone\n')
+                         self.banner+'\n'+digits+'\ndone\n')
 
     def test_array_and_scalar_storage(self):
         self.check('10 LET A=199\n20 LET @(A)=65535\n30 LET @(0)=3\n'
@@ -146,7 +153,7 @@ class Basic(unittest.TestCase):
             expected += f'E{exact}\nM{matches-exact}\n'
         expected += 'WIN\n'
         self.assertEqual(self.execute(program+'RUN\n'+''.join(f'{g}\n' for g in guesses),
-                                      budget=30_000_000), 'BASIC4\n'+expected)
+                                      budget=30_000_000), self.banner+'\n'+expected)
 
     def console(self, source):
         return self.execute(source,options=('-c',),budget=20_000_000)
@@ -155,7 +162,7 @@ class Basic(unittest.TestCase):
         output = self.console('PRINT 2+2\nLET A=42\nPRINT A\n'
             '10 LET A=A+1\n20 PRINT A\n30 END\nLIST\nRUN\nRUN\n'
             'PRINT A\nNEW\nPRINT A\nLIST\nBYE\n')
-        self.assertTrue(output.startswith('BASIC4\nREADY (UPPERCASE)\n> PRINT 2+2\n4\n'))
+        self.assertTrue(output.startswith(self.banner+'\nREADY (UPPERCASE)\n> PRINT 2+2\n4\n'))
         self.assertIn('> LIST\n10 LET A=A+1\n20 PRINT A\n30 END\n',output)
         self.assertEqual(output.count('> RUN\n1\nREADY (UPPERCASE)\n'),2)
         self.assertIn('> PRINT A\n42\n',output)
@@ -186,14 +193,14 @@ class Basic(unittest.TestCase):
         output = self.console('LET A=123\nINPUT A\n12xjunk\nPRINT A\nBYE\n')
         self.assertEqual(output.count('?ERROR'),1)
         self.assertIn('> PRINT A\n123\n',output)
-        full = '1 REM '+'x'*379+'\n'
+        full = '1 REM '+'x'*(self.program_bytes-5)+'\n'
         output = self.console(full+'2 PRINT 7\nPRINT 5\nLIST\nRUN\nNEW\n1 PRINT 6\nRUN\nBYE\n')
         self.assertEqual(output.count('?ERROR'),1)
         self.assertIn('?ERROR 6\n',output)
         self.assertIn('> PRINT 5\n5\n> LIST\n'+full,output)
         self.assertIn('> RUN\n6\n',output)
-        lines = ''.join(f'{n} REM\n' for n in range(1,33))
-        output = self.console(lines+'33 END\nLIST\nNEW\n1 END\nRUN\nBYE\n')
+        lines = ''.join(f'{n} REM\n' for n in range(1,self.program_lines+1))
+        output = self.console(lines+f'{self.program_lines+1} END\nLIST\nNEW\n1 END\nRUN\nBYE\n')
         self.assertEqual(output.count('?ERROR'),1)
         self.assertIn('?ERROR 5\n',output)
         self.assertIn('> LIST\n'+lines,output)
@@ -203,7 +210,7 @@ class Basic(unittest.TestCase):
         import pty, select, termios, time
         master, slave = pty.openpty()
         original = termios.tcgetattr(slave)
-        process = subprocess.Popen([str(HOST),str(IMAGE)],stdin=slave,stdout=slave,stderr=subprocess.PIPE)
+        process = subprocess.Popen([str(HOST),str(self.image)],stdin=slave,stdout=slave,stderr=subprocess.PIPE)
         output = bytearray()
         def until(needle):
             deadline = time.monotonic()+10
@@ -247,15 +254,15 @@ class Basic(unittest.TestCase):
         self.check('10 IF 0=1 THEN 999\n20 PRINT 1\n30 END\nRUN\n', '1\n')
 
     def test_program_boundaries(self):
-        self.check('10 REM '+'x'*379+'\nRUN\n', '')  # 383 bytes plus terminator
-        self.check('10 REM '+'x'*379+'\n20 \nRUN\n', '?ERROR 6\n')
-        self.check('10 REM '+'x'*380+'\nRUN\n', '?ERROR 6\n')
-        lines=''.join(f'{i} REM\n' for i in range(1, 33))
+        self.check('10 REM '+'x'*(self.program_bytes-5)+'\nRUN\n', '')  # 383 bytes plus terminator
+        self.check('10 REM '+'x'*(self.program_bytes-5)+'\n20 \nRUN\n', '?ERROR 6\n')
+        self.check('10 REM '+'x'*(self.program_bytes-4)+'\nRUN\n', '?ERROR 6\n')
+        lines=''.join(f'{i} REM\n' for i in range(1, self.program_lines+1))
         self.check(lines+'RUN\n', '')
-        self.check(lines+'33 REM\nRUN\n', '?ERROR 5\n')
+        self.check(lines+f'{self.program_lines+1} REM\nRUN\n', '?ERROR 5\n')
         self.check('65535 PRINT 1\nRUN\n', '1\n')
         # A final empty statement fills the last byte exactly; reject it safely.
-        self.check('10 REM '+'x'*378+'\n20 \nRUN\n', '?ERROR 1\n')
+        self.check('10 REM '+'x'*(self.program_bytes-6)+'\n20 \nRUN\n', '?ERROR 1\n')
 
     def test_errors(self):
         cases = (
@@ -280,7 +287,7 @@ class Basic(unittest.TestCase):
                 self.check(source, expected)
 
     def test_infinite_basic_loop_obeys_emulator_budget(self):
-        self.assertEqual(self.execute('10 GOTO 10\nRUN\n', budget=100_000, status=2), 'BASIC4\n')
+        self.assertEqual(self.execute('10 GOTO 10\nRUN\n', budget=100_000, status=2), self.banner+'\n')
 
 
 if __name__ == '__main__':

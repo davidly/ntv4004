@@ -144,6 +144,8 @@ formulas, assign intermediate results to variables.
 
 ## Limits and errors
 
+For the standard `basic.hex` profile:
+
 * 32 numbered lines, with line numbers from 1 to 65535.
 * 384 bytes for statements, including one zero terminator per line. Line numbers
   and whitespace before the statement are not stored. Spaces inside statements
@@ -160,19 +162,56 @@ already written part of its output.
 | 2 | A decimal constant, input number or line number exceeds 65535. |
 | 3 | Division by zero. |
 | 4 | A taken jump targets a line that does not exist. |
-| 5 | A zero, duplicate or out-of-order line number, or more than 32 lines. |
+| 5 | A zero, duplicate or out-of-order line number, or more than the profile's line limit. |
 | 6 | Statement storage is full. |
 | 7 | Array subscript outside 0 through 199. |
 
 An intentional BASIC loop can run forever. The emulator's `-n:cycles` option
 limits execution, for example `-n:1000000`; reaching that limit exits with status 2.
 
+## Byte-array profile
+
+`byte.hex` (banner `BASIC4B`) retains the standard commands, `INPUT`, and
+interactive `RUN`, `LIST`, `NEW`, and `BYE`. Its 26 scalar variables and
+arithmetic remain unsigned 16-bit. Its 200-element `@()` array stores
+unsigned bytes: writing an element keeps the low eight bits, modulo 256.
+An array read promotes that byte to a 16-bit value. For example, storing
+255 then evaluating `@(0)+1` gives 256; storing that result back gives 0.
+Constants and input numbers still have a 65535 maximum before assignment.
+Array subscripts must be in 0–199 and are checked before narrowing.
+
+This profile holds **48 lines and 512 bytes of statement text**, with line
+numbers 1–65535. It occupies **4064 bytes of ROM**, **2008 main RAM nibbles**,
+and **73 status registers**. The byte array occupies 400 nibbles rather than
+800; this leaves room for the larger source buffer and line tables.
+
+```sh
+python3 basic/build.py --byte-array
+./ntv4004 basic/byte.hex
+./ntv4004 -p -l:basic/examples/e.bas basic/byte.hex
+python3 tests/basic_byte.py
+```
+
+The e and sieve examples use only byte-sized array elements and work in
+both standard and byte profiles. Programs requiring larger array values
+should use a word-array profile. Execution still parses BASIC on the 4004;
+byte storage adds no type declarations or per-element type metadata.
+
+| Benchmark | Standard profile instruction cycles | Byte-array profile instruction cycles |
+| --- | ---: | ---: |
+| e, 192 digits | 441,734,957 | 442,232,835 |
+| sieve, ten passes | 10,174,572,014 | 10,179,668,505 |
+
+These profiles have essentially the same benchmark speed; the byte profile
+provides more program capacity while retaining all standard commands.
+
 ## Building and testing
 
 ```sh
 python3 cc4.py --size --stats basic/basic.c
-python3 basic/build.py --all       # also builds the larger-program profile
+python3 basic/build.py --all       # standard, larger-program and byte-array profiles
 python3 tests/basic.py
+python3 tests/basic_byte.py
 python3 tests/basic_large.py
 ./test.sh                         # Windows: test.bat
 ```
@@ -296,18 +335,19 @@ high-precision decimal calculation; sieve counts are checked independently too.
 ./ntv4004 -p -n:10000000000 -l:basic/examples/ttt.bas basic/large.hex
 ```
 
-TTT uses a second ROM profile, `large.hex` (banner `BASIC4L`), built from the
+TTT uses the larger-program ROM profile, `large.hex` (banner `BASIC4L`), built from the
 same C interpreter. It trades the large array and `INPUT` for program storage:
 
-| Resource | Standard `basic.hex` | Larger-program `large.hex` |
-| --- | --- | --- |
-| Source storage | 384 bytes, 32 lines | 832 packed bytes, up to 255 lines |
-| Line numbers | 1–65535 | 1–255 |
-| Integer array | `@(0)`–`@(199)` | `@(0)`–`@(63)` |
-| `INPUT` | Supported | Unsupported |
-| ROM end, including gaps | 4048 bytes | 4072 bytes |
-| Main RAM | 2024 nibbles | 2024 nibbles |
-| Status registers | 72 | 87 |
+| Resource | Standard `basic.hex` | Byte-array `byte.hex` | Larger-program `large.hex` |
+| --- | --- | --- | --- |
+| Source storage | 384 bytes, 32 lines | 512 bytes, 48 lines | 832 packed bytes, up to 255 lines |
+| Line numbers | 1–65535 | 1–65535 | 1–255 |
+| Array | 200 unsigned words | 200 unsigned bytes | 64 unsigned words |
+| `INPUT` | Supported | Supported | Unsupported |
+| Interactive commands | Supported | Supported | Unsupported |
+| ROM end, including gaps | 4048 bytes | 4064 bytes | 4072 bytes |
+| Main RAM | 2024 nibbles | 2008 nibbles | 2024 nibbles |
+| Status registers | 72 | 73 | 87 |
 
 The larger profile loads ordinary ASCII BASIC on the 4004. Its native loader
 replaces statement keywords and `THEN` with single-byte tokens, encodes integer
@@ -344,5 +384,5 @@ Interactive tests exercise repeated runs, direct statements, listing and reset,
 full line/text capacity, source preservation after errors, malformed input,
 CRLF, backspace/Delete, and a real POSIX pseudo-terminal. They also check that
 terminal settings are restored on exit. Forced-console tests run on Windows.
-Both profiles retain the original 4 KB ROM limit and the program and array
+All three profiles retain the original 4 KB ROM limit and the program and array
 capacities listed above.

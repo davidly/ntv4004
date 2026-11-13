@@ -120,7 +120,8 @@ behavior and its existing output.
 ./ntv4004 -p -l:basic/examples/e.bas basic/basic.hex
 ./ntv4004 -p -l:basic/examples/sieve.bas basic/basic.hex
 ./ntv4004 -p -l:basic/examples/ttt.bas basic/large.hex
-python3 basic/build.py --all                # rebuild both interpreter ROMs
+python3 basic/build.py --byte-array         # build the byte-array profile
+python3 basic/build.py --all                # rebuild all three interpreter ROMs
 ```
 
 The examples include counting, Fibonacci, squares, numerical input, Mastermind and a
@@ -135,8 +136,20 @@ ordinary multiplication/division precedence. Strings are supported by `PRINT`.
 TTT uses the alternative `large.hex` profile: a 64-element array, 832 bytes of
 packed program storage with numeric tokens, line numbers 1–255, and no `INPUT`. Its iterative
 alpha-beta search checks all three distinct openings and reports 6493 moves.
-Both interpreter profiles fit the original 4004 ROM and RAM limits.
+All three interpreter profiles fit the original 4004 ROM and RAM limits.
 See [basic/README.md](basic/README.md) for the complete syntax, limits and errors.
+
+`basic/byte.hex` (banner `BASIC4B`) provides the same commands, including
+interactive operation and `INPUT`, with a 200-element **unsigned byte array**.
+Scalar variables and arithmetic remain 16-bit; array stores wrap modulo 256.
+It holds **48 lines and 512 bytes** of statement text. The profile occupies
+4,064 bytes of ROM and 2,008 main RAM nibbles. Choose `basic.hex` when array
+values need more than eight bits. See the
+[byte-array profile](basic/README.md#byte-array-profile) for details.
+
+```sh
+./ntv4004 -p -l:basic/examples/e.bas basic/byte.hex
+```
 
 `mastermind.bas` demonstrates an interactive guessing game with duplicate-aware
 scoring: `E` counts exact positions and `M` counts misplaced digits. Its sample
@@ -151,6 +164,7 @@ waits; these are instruction cycles, each taking eight clock periods.
 | --- | --- | --- | ---: | ---: |
 | [sieve](basic/examples/sieve.bas) | Ten segmented passes; 1899 odd primes from 3 through 16383 | `basic.hex` | 10,174,572,014 | 109,995.37 s (30 h 33 min) |
 | [e](basic/examples/e.bas) | 192 digits using the factorial-series spigot | `basic.hex` | 441,734,957 | 4,775.51 s (1 h 19 min) |
+| [e, byte array](basic/examples/e.bas) | Same 192-digit spigot with byte remainders | `byte.hex` | 442,232,835 | 4,780.90 s (1 h 19 min) |
 | [ttt](basic/examples/ttt.bas) | One iteration over three distinct openings; 6493 moves | `large.hex` | 3,191,215,378 | 34,499.63 s (9 h 35 min) |
 
 The BASIC sieve uses segmentation to fit its 200-element array, so its timing
@@ -268,9 +282,9 @@ and `char` elsewhere:
 | Program | ROM footprint | Instruction cycles | 740 kHz 4004 |
 | --- | ---: | ---: | ---: |
 | [hello](examples/c/hello.c) | 90 bytes | 1,773 | 0.02 s |
-| [e](examples/c/e.c) | 812 bytes | 29,482,644 | 319 s |
+| [e](examples/c/e.c) | 647 bytes | 27,731,334 | 300 s |
 | [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s |
-| [ttt](examples/c/ttt.c) | 1,688 bytes | 11,955,484 | 129 s |
+| [ttt](examples/c/ttt.c) | 2,316 bytes | 8,883,189 | 96 s |
 | [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s |
 | [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s |
 | [maze](examples/c/maze.c) | 1,944 bytes | 460,917 | 4.98 s |
@@ -370,10 +384,10 @@ interpreter requires `--size` to fit in 4 KB.
 
 | Program | Default ROM | `--size` ROM |
 | --- | ---: | ---: |
-| C TTT | 1,688 | 1,557 |
+| C TTT | 2,316 | 1,980 |
 | C queens | 1,146 | 1,052 |
 | C hanoi | 979 | 902 |
-| C e | 812 | 796 |
+| C e | 647 | 638 |
 | C sieve | 616 | 592 |
 
 ROM footprint is the highest occupied byte plus one, including runtime, data

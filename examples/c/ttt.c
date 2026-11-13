@@ -1,6 +1,7 @@
 /*
    For the 4004, main takes no arguments, the default is one iteration, and
-   cc4.py's ttype is its 4-bit __nibble.
+   cc4.py's ttype is its 4-bit __nibble. winner2 checks only winning
+   lines through the last move, selected with a switch.
 
    This version builds with old compilers including:
        Aztec C 1.06 for 8080 & Z80 on CP/M.
@@ -46,58 +47,110 @@ int g_Iterations = DefaultIterations;
 int g_IMoves;
 ttype g_board[ 9 ];
 
-LookForWinner()
+ttype winner2( move ) ttype move;
 {
-    int p;
-    p = g_board[0]; /* faster as int than ttype on 8086 and Z80 */
-    if ( PieceBlank != p )
+    ttype x;
+
+    switch( move )
     {
-        if ( p == g_board[1] && p == g_board[2] )
-            return p;
-
-        if ( p == g_board[3] && p == g_board[6] )
-            return p;
-    }
-
-    p = g_board[3];
-    if ( PieceBlank != p && p == g_board[4] && p == g_board[5] )
-        return p;
-
-    p = g_board[6];
-    if ( PieceBlank != p && p == g_board[7] && p == g_board[8] )
-        return p;
-
-    p = g_board[1];
-    if ( PieceBlank != p && p == g_board[4] && p == g_board[7] )
-        return p;
-
-    p = g_board[2];
-    if ( PieceBlank != p && p == g_board[5] && p == g_board[8] )
-        return p;
-
-    p = g_board[4];
-    if ( PieceBlank != p )
-    {
-        if ( ( p == g_board[0] ) && ( p == g_board[8] ) )
-            return p;
-
-        if ( ( p == g_board[2] ) && ( p == g_board[6] ) )
-            return p;
+        case 0:
+        {
+            x = g_board[ 0 ];
+            if ( ( ( x == g_board[1] ) && ( x == g_board[2] ) ) ||
+                 ( ( x == g_board[3] ) && ( x == g_board[6] ) ) ||
+                 ( ( x == g_board[4] ) && ( x == g_board[8] ) ) )
+               return x;
+            break;
+        }
+        case 1:
+        {
+            x = g_board[ 1 ];
+            if ( ( ( x == g_board[0] ) && ( x == g_board[2] ) ) ||
+                 ( ( x == g_board[4] ) && ( x == g_board[7] ) ) )
+                return x;
+            break;
+        }
+        case 2:
+        {
+            x = g_board[ 2 ];
+            if ( ( ( x == g_board[0] ) && ( x == g_board[1] ) ) ||
+                 ( ( x == g_board[5] ) && ( x == g_board[8] ) ) ||
+                 ( ( x == g_board[4] ) && ( x == g_board[6] ) ) )
+                return x;
+            break;
+        }
+        case 3:
+        {
+            x = g_board[ 3 ];
+            if ( ( ( x == g_board[4] ) && ( x == g_board[5] ) ) ||
+                 ( ( x == g_board[0] ) && ( x == g_board[6] ) ) )
+                return x;
+            break;
+        }
+        case 4:
+        {
+            x = g_board[ 4 ];
+            if ( ( ( x == g_board[0] ) && ( x == g_board[8] ) ) ||
+                 ( ( x == g_board[2] ) && ( x == g_board[6] ) ) ||
+                 ( ( x == g_board[1] ) && ( x == g_board[7] ) ) ||
+                 ( ( x == g_board[3] ) && ( x == g_board[5] ) ) )
+                return x;
+            break;
+        }
+        case 5:
+        {
+            x = g_board[ 5 ];
+            if ( ( ( x == g_board[3] ) && ( x == g_board[4] ) ) ||
+                 ( ( x == g_board[2] ) && ( x == g_board[8] ) ) )
+                return x;
+            break;
+        }
+        case 6:
+        {
+            x = g_board[ 6 ];
+            if ( ( ( x == g_board[7] ) && ( x == g_board[8] ) ) ||
+                 ( ( x == g_board[0] ) && ( x == g_board[3] ) ) ||
+                 ( ( x == g_board[4] ) && ( x == g_board[2] ) ) )
+                return x;
+            break;
+        }
+        case 7:
+        {
+            x = g_board[ 7 ];
+            if ( ( ( x == g_board[6] ) && ( x == g_board[8] ) ) ||
+                 ( ( x == g_board[1] ) && ( x == g_board[4] ) ) )
+                return x;
+            break;
+        }
+        case 8:
+        {
+            x = g_board[ 8 ];
+            if ( ( ( x == g_board[6] ) && ( x == g_board[7] ) ) ||
+                 ( ( x == g_board[2] ) && ( x == g_board[5] ) ) ||
+                 ( ( x == g_board[0] ) && ( x == g_board[4] ) ) )
+                return x;
+            break;
+         }
     }
 
     return PieceBlank;
-} /*LookForWinner*/
+} /*winner2*/
+
 
 MinMax( alpha, beta, depth, move ) ttype alpha; ttype beta; ttype depth; ttype move;
 {
     ttype pieceMove, score;   /* better perf with char than int. out of registers so use stack */
-    int p, value;    /* better perf with these as an int on Z80, 8080, and 8086 */
+#ifdef __CC4__
+    ttype p, value;  /* Board positions and scores fit in four bits. */
+#else
+    int p, value;    /* better perf with int on Z80, 8080, and 8086 */
+#endif
 
     g_IMoves++;
 
     if ( depth >= 4 )
     {
-        p = LookForWinner();
+        p = winner2(move);
 
         if ( PieceBlank != p )
         {

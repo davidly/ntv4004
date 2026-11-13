@@ -4,12 +4,14 @@
 */
 #include <stdio.h>
 
-#define DIGITS_TO_FIND 200 /*9009;*/
+/* With 200 cells, counters are at most 200 and remainders at most 198.
+   The intermediate x is nonnegative and stays below 2000. */
+#define DIGITS_TO_FIND 200
 main() {
-  int N;
-  int x ;
-  int a[ DIGITS_TO_FIND ];
-  int n;
+  unsigned char N;
+  unsigned x;
+  unsigned char a[ DIGITS_TO_FIND ];
+  unsigned char n;
 
   x = 0;
   N = DIGITS_TO_FIND;
@@ -26,7 +28,7 @@ main() {
 
           x = 10 * a[n-1] + x/n;
       }
-      printf("%d", x);
+      printf("%u", x);
   }
 
   printf( "\ndone\n" );

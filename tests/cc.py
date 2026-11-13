@@ -858,6 +858,75 @@ int main() {
 """
         self.assertEqual(run_c(source), 'xxxxxx\n')
 
+    def test_nibble_switch(self):
+        source = r"""
+int calls;
+__nibble choose(__nibble n) { calls++; return n; }
+int main() {
+    int i, value;
+    __nibble n;
+    for (i = 0; i < 16; i++) {
+        n = i; value = 99;
+        switch (choose(n)) {
+            case 0: value = 10; break;
+            case 1: value = 11; break;
+            case 7: value = 17; break;
+            case 15: value = 25; break;
+            default: value = 30;
+        }
+        printf("%d ", value);
+    }
+    printf("calls %d\n", calls);
+    n = 0;
+    switch (n) { case 256: puts("wrong"); break; case 0: puts("zero"); }
+    switch (256) { case 0: puts("wrong"); break; default: puts("wide"); }
+    return 0;
+}
+"""
+        self.assertEqual(run_c(source),
+                         '10 11 30 30 30 30 30 17 30 30 30 30 30 30 30 25 calls 16\nzero\nwide\n')
+
+    def test_ttt_last_move_winner(self):
+        # Every reachable board/last-move pair, including terminal positions.
+        lines = ((0,1,2),(3,4,5),(6,7,8),(0,3,6),(1,4,7),(2,5,8),(0,4,8),(2,4,6))
+        expanded, cases = set(), {}
+        board = [0]*9
+
+        def visit(piece, last):
+            state = tuple(board)
+            winner = next((board[a] for a,b,c in lines
+                           if board[a] and board[a] == board[b] == board[c]), 0)
+            if last is not None:
+                cases[state,last] = winner
+            if state in expanded or winner:
+                return
+            expanded.add(state)
+            for pos in range(9):
+                if not board[pos]:
+                    board[pos] = piece
+                    visit(3-piece, pos)
+                    board[pos] = 0
+
+        visit(1, None)
+        self.assertGreater(len(cases), 15000)
+        cases[(0,)*9,9] = cases[(0,)*9,15] = 0
+        keys, expected = bytearray(), ''
+        for (board,last), score in cases.items():
+            keys.extend(bytes(48+v for v in board)+(48+last).to_bytes(1,'little'))
+            expected += str(score)
+        source = (ROOT/'examples/c/ttt.c').read_text()
+        source = source[:source.index('main()')]+f"""
+int main() {{
+    int i, test;
+    for (test=0; test<{len(cases)}; test++) {{
+        for (i=0; i<9; i++) g_board[i] = getchar()-'0';
+        putchar('0'+winner2(getchar()-'0'));
+    }}
+    return 0;
+}}
+"""
+        self.assertEqual(run_c(source, limit=200_000_000, keys=bytes(keys)), expected)
+
     def test_goto(self):
         source = r"""
 int f(int n) {

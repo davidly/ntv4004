@@ -196,6 +196,7 @@ DESTI:
         JMS QV071
         JCN 2,$+4
         JUN L0026
+; POS++;
         JMS QV077
         FIM 0,1
         JUN QRETF
@@ -316,10 +317,11 @@ L0038:
         JMS QV078
         JUN L0039
 L0040:
-; ELSE IF (CH == '@') VALUE = VARS(DESTINATION());
+; ELSE IF (CH == '@') (
         FIM 0AH,040H
         JMS QEQ8
         JCN 4,L0042
+; VALUE = VARS(DESTINATION());
         FIM 6,018H
         JMS W0014
         JUN DESTI
@@ -742,10 +744,11 @@ L0112:
         JCN 0CH,L0115
         JMS QV041
 L0115:
-; IF (!ERROR) VARS(VARIABLE) = VALUE;
+; IF (!ERROR) (
         JMS W0004
         LD 7
         JCN 0CH,L0116
+; VARS(VARIABLE) = VALUE;
         FIM 0,082H
         JMS QV093
         FIM 0,092H
@@ -1113,6 +1116,7 @@ L0176:
         JMS QV072
         LD 7
         JCN 0CH,L0168
+; VARS(VARIABLE) = VALUE;
         FIM 0,033H
         JMS QV093
         FIM 0,043H

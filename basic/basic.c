@@ -8,18 +8,29 @@
 char text[SPACE];
 unsigned vars[26+CELLS];
 #else
+#ifdef BYTE_ARRAY
+#define SPACE 512
+#define LINES 48
+#else
 #define SPACE 384
 #define LINES 32
+#endif
 #define CELLS 200
 char text[SPACE];
-unsigned labels[LINES], offsets[LINES], vars[26+CELLS];
+unsigned labels[LINES], offsets[LINES];
+#ifdef BYTE_ARRAY
+unsigned vars[26];
+unsigned char cells[CELLS];
+#else
+unsigned vars[26+CELLS];
+#endif
 #endif
 
 unsigned used, pos;
 #ifdef LARGE
 unsigned line;
 #else
-char line;              /* At most 32 stored lines. */
+char line;              /* An index into the stored-line table. */
 char command[48];
 char quitting;
 #endif
@@ -67,15 +78,27 @@ unsigned number()
 #endif
 }
 
-/* A-Z are scalar slots; @(0)..@(199) share the remaining word slots.
-   Array subscripts are a literal or a scalar variable, not an expression. */
+/* Destinations encode either a scalar or an array index. The byte profile
+   uses array slots 0..199 and scalar slots 200..225; word profiles put the
+   26 scalars first. Subscripts are a literal or scalar, not an expression. */
+#ifdef BYTE_ARRAY
+unsigned char destination()
+#else
 unsigned destination()
+#endif
 {
     unsigned index;
     char ch;
     /* Callers have already consumed leading whitespace. */
     ch = text[pos];
-    if (ch >= 'A' && ch <= 'Z') { pos++; return ch-'A'; }
+    if (ch >= 'A' && ch <= 'Z') {
+        pos++;
+#ifdef BYTE_ARRAY
+        return ch+(CELLS-'A');
+#else
+        return ch-'A';
+#endif
+    }
     if (ch != '@') { error = 1; return 0; }
     pos++; blanks(); need('('); blanks();
     ch = text[pos];
@@ -84,7 +107,11 @@ unsigned destination()
     blanks(); need(')');
     if (error) return 0;
     if (index >= CELLS) { error = 7; return 0; }
+#ifdef BYTE_ARRAY
+    return index;
+#else
     return index+26;
+#endif
 }
 
 unsigned atom()
@@ -94,7 +121,13 @@ unsigned atom()
     blanks();
     ch = text[pos];
     if (ch >= 'A' && ch <= 'Z') { pos++; value = vars[ch-'A']; }
-    else if (ch == '@') value = vars[destination()];
+    else if (ch == '@') {
+#ifdef BYTE_ARRAY
+        value = cells[destination()];
+#else
+        value = vars[destination()];
+#endif
+    }
     else value = number();
     blanks();
     return value;
@@ -214,27 +247,60 @@ void printline()
     else putchar(10);
 }
 
+
+#ifdef BYTE_ARRAY
+/* The loader and INPUT share their console-number reader. */
+char ch;
+unsigned readnumber()
+{
+    unsigned value;
+    value = 0;
+    if (ch < '0' || ch > '9') error = 1;
+    while (ch >= '0' && ch <= '9') {
+        if (value > 6553 || (value == 6553 && ch > '5')) error = 2;
+        value = value*10 + ch-'0';
+        ch = getchar();
+    }
+    return value;
+}
+#endif
+
 #ifndef LARGE
 void inputvar()
 {
+#ifndef BYTE_ARRAY
     char ch;
+#endif
     unsigned variable, value;
     need('N'); need('P'); need('U'); need('T'); blanks();
     variable = destination();
     if (!error) {
+#ifndef BYTE_ARRAY
         value = 0;
+#endif
         putchar('?'); putchar(' ');
         ch = getchar();
         while (ch <= ' ') ch = getchar();
+#ifdef BYTE_ARRAY
+        value = readnumber();
+#else
         if (ch < '0' || ch > '9') error = 1;
         while (ch >= '0' && ch <= '9') {
             if (value > 6553 || (value == 6553 && ch > '5')) error = 2;
             value = value * 10 + ch - '0';
             ch = getchar();
         }
+#endif
         while (ch == ' ' || ch == 9) ch = getchar();
         if (ch != 13 && ch != 10) error = 1;
-        if (!error) vars[variable] = value;
+        if (!error) {
+#ifdef BYTE_ARRAY
+            if (variable < CELLS) cells[variable] = value;
+            else vars[variable-CELLS] = value;
+#else
+            vars[variable] = value;
+#endif
+        }
         if (interactive) while (ch != 13 && ch != 10) ch = getchar();
     }
 }
@@ -303,7 +369,14 @@ void statement()
         variable = destination();
         blanks(); need('=');
         value = expression();
-        if (!error) vars[variable] = value;
+        if (!error) {
+#ifdef BYTE_ARRAY
+            if (variable < CELLS) cells[variable] = value;
+            else vars[variable-CELLS] = value;
+#else
+            vars[variable] = value;
+#endif
+        }
     } else if (ch == 'E') {
 #ifndef LARGE
         need('N'); need('D');
@@ -423,8 +496,19 @@ void swapline()
 
 void clearvars()
 {
+#ifdef BYTE_ARRAY
+    char i;
+#else
     unsigned i;
+#endif
+#ifdef BYTE_ARRAY
+    for (i = 0; i < 26+CELLS; i++) {
+        if (i < CELLS) cells[i] = 0;
+        else vars[i-CELLS] = 0;
+    }
+#else
     for (i = 0; i < 26+CELLS; i++) vars[i] = 0;
+#endif
 }
 
 _Bool consoleline(char ch)
@@ -468,7 +552,9 @@ _Bool consoleline(char ch)
 
 void load()
 {
+#ifndef BYTE_ARRAY
     char ch;
+#endif
     unsigned label, mark;
 #ifdef LARGE
     unsigned previous;
@@ -494,13 +580,19 @@ void load()
             if (ch != 13 && ch != 10) error = 1;
             return;
         }
+#ifndef BYTE_ARRAY
         label = 0;
+#endif
+#ifdef BYTE_ARRAY
+        label = readnumber();
+#else
         if (ch < '0' || ch > '9') error = 1;
         while (ch >= '0' && ch <= '9') {
             if (label > 6553 || (label == 6553 && ch > '5')) error = 2;
             label = label * 10 + ch - '0';
             ch = getchar();
         }
+#endif
         if (!error && ch != ' ' && ch != 9) error = 1;
 #ifdef LARGE
         if (!error && (!label || label > 255 || label <= previous)) error = 5;
@@ -536,6 +628,8 @@ int main()
 {
 #ifdef LARGE
     puts("BASIC4L");
+#elif defined(BYTE_ARRAY)
+    puts("BASIC4B");
 #else
     puts("BASIC4");
 #endif

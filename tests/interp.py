@@ -210,6 +210,13 @@ class Interp(unittest.TestCase):
         self.assertTrue(self.run_both(compiled / 'queens.hex').endswith(b'\n92 solutions\n'))
         self.assertTrue(self.run_both(compiled / 'hanoi.hex').endswith(b'10 discs: 1023 moves\n'))
 
+    def test_byte_basic(self):
+        source = (b'10 LET A=65535\n20 LET @(199)=A\n30 PRINT A\n'
+                  b'40 PRINT @(199)+1\n50 INPUT @(0)\n60 PRINT @(0)\n'
+                  b'70 END\nRUN\n65535\n')
+        self.assertEqual(self.run_both(ROOT/'basic/byte.hex', source),
+                         b'BASIC4B\n65535\n256\n? 255\n')
+
     def test_basic_examples(self):
         image = ROOT / 'basic/basic.hex'
         examples = ROOT / 'basic/examples'

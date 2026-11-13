@@ -46,7 +46,7 @@ class Fast(unittest.TestCase):
         self.compare(source,limit=512)
 
     def test_basic_snapshots(self):
-        for name,profile in (('e','basic'),('sieve','basic'),('ttt','large')):
+        for name,profile in (('e','basic'),('e','byte'),('sieve','basic'),('ttt','large')):
             for budget in (65535,65536,65537,2_000_000):
                 args = ['-r',f'-n:{budget}','-l:'+str(ROOT/f'basic/examples/{name}.bas'),
                         str(ROOT/f'basic/{profile}.hex')]

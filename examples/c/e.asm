@@ -1,15 +1,15 @@
 ; E: COMPILED FROM C BY CC4.PY
         ORG 0
 ; CLEAR THE RAM
-        LDM 0CH
+        LDM 0EH
         XCH 0DH
         JMS QCLR
 MAIN:
 ; MAIN
-; INT N;
-; INT X ;
-; INT A( DIGITS?TO?FIND );
-; INT N;
+; UNSIGNED CHAR N;
+; UNSIGNED X;
+; UNSIGNED CHAR A( DIGITS?TO?FIND );
+; UNSIGNED CHAR N;
 ; X = 0;
         FIM 4,0
         FIM 6,0
@@ -19,39 +19,38 @@ MAIN:
         FIM 4,0
         FIM 6,0C8H
         FIM 0,020H
-        JMS QSTA
+        JMS QSTAC
 ; FOR (N = N - 1; N > 0; --N) (
         JMS QDEC
         FIM 0,040H
-        JMS QSTA
+        JMS QSTAC
         JUN L0002
 L0001:
 ; A(N) = 1;
         FIM 0,040H
         JMS QLDA
         JMS QSHL1
-        JMS QSHL1
         FIM 8,0
         FIM 0AH,1
-        JMS QSTI
+        JMS QSTIC
         FIM 0,040H
-        JMS QDECV
+        JMS QDECC
 L0002:
-        FIM 8,0
-        FIM 0AH,0
-        JMS QSGT
+        LD 7
+        JCN 0CH,L0001
+        LD 6
         JCN 0CH,L0001
 ; A(1) = 2, A(0) = 0;
         FIM 4,0
-        FIM 6,4
+        FIM 6,2
         FIM 8,0
         FIM 0AH,2
-        JMS QSTI
+        JMS QSTIC
         FIM 4,0
         FIM 6,0
         FIM 8,0
         FIM 0AH,0
-        JMS QSTI
+        JMS QSTIC
 ; WHILE (N > 9) (
         JUN L0006
 L0005:
@@ -61,11 +60,11 @@ L0005:
         FIM 0,050H
         JMS QSTA
         FIM 0,020H
-        JMS QDECV
+        JMS QDECC
         FIM 0,050H
         JMS QLDA
         FIM 0,040H
-        JMS QSTA
+        JMS QSTAC
 ; WHILE (--N) (
         JUN L0010
 L0009:
@@ -74,23 +73,21 @@ L0009:
         JMS QLDA
         FIM 0,040H
         JMS QLDB
-        JMS QSMOD
+        JMS QUMOD
         FIM 0,050H
         JMS QSTA
         FIM 0,040H
         JMS QLDA
         JMS QSHL1
-        JMS QSHL1
         FIM 0,050H
         JMS QLDB
-        JMS QSTI
+        JMS QSTIC
 ; X = 10 * A(N-1) + X/N;
         FIM 0,040H
         JMS QLDA
         JMS QDEC
         JMS QSHL1
-        JMS QSHL1
-        JMS QLDI
+        JMS QLDIC
         FIM 0,050H
         JMS QSTA
         JMS QSHL1
@@ -105,7 +102,7 @@ L0009:
         JMS QLDA
         FIM 0,040H
         JMS QLDB
-        JMS QSDIV
+        JMS QUDIV
         JMS QXAB
         FIM 0,050H
         JMS QLDA
@@ -114,20 +111,26 @@ L0009:
         JMS QSTA
 L0010:
         FIM 0,040H
-        JMS QDECV
-        JMS QTST
+        JMS QDECC
+        LD 7
         JCN 0CH,L0009
-; PRINTF("%D", X);
+        LD 6
+        JCN 0CH,L0009
+; PRINTF("%U", X);
         FIM 0,030H
         JMS QLDA
-        JMS QPRTD
+        JMS QPRTU
 L0006:
         FIM 0,020H
         JMS QLDA
-        FIM 8,0
         FIM 0AH,9
-        JMS QSGT
-        JCN 0CH,L0005
+        CLC
+        LD 0BH
+        SUB 7
+        CMC
+        LD 0AH
+        SUB 6
+        JCN 0AH,L0005
 ; PRINTF( "?NDONE?N" );
         FIM 0,S0001 AND 0FFH
         JMS QS1
@@ -135,41 +138,42 @@ L0006:
         FIM 4,0
         FIM 6,0
         JUN QEXIT
-        ORG 0D8H
-; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
-QTST:   LD 4
-        JCN 0CH,QTT
-        LD 5
-        JCN 0CH,QTT
-        LD 6
-        JCN 0CH,QTT
-        LD 7
-        JCN 0CH,QTT
-        BBL 0
-QTT:    BBL 1
-QNOTZ:  LD 4
-        JCN 0CH,QZF
-        LD 5
-        JCN 0CH,QZF
-        LD 6
-        JCN 0CH,QZF
-        LD 7
-        JCN 0CH,QZF
-        BBL 1
-QZF:    BBL 0
-        ORG 0F4H
-; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
-QLDA:   LD 1
+        ORG 0D4H
+; PRINT THE STRING AT R0R1 ON THIS PAGE.
+QS1:   FIM 14,0F0H
+        SRC 14
+QSL1:  FIN 2
+        LD 2
+        JCN 0CH,QSC1
+        LD 3
+        JCN 4,QSX1
+QSC1:  LD 2
+        WRR
+        LD 3
+        WRR
+        ISZ 1,QSL1
+        INC 0
+        JUN QSL1
+QSX1:  BBL 0
+S0001:
+        DB 0AH,064H,06FH,06EH,065H,0AH,0
+        ORG 0EFH
+; STORE A, OR ITS LOW BYTE, IN THE STATUS REGISTER AT R0R1.
+QSTAC:  LDM 0
+        XCH 4
+        LDM 0
+        XCH 5
+QSTA:   LD 1
         DCL
         SRC 0
-        RD0
-        XCH 4
-        RD1
-        XCH 5
-        RD2
-        XCH 6
-        RD3
-        XCH 7
+        LD 4
+        WR0
+        LD 5
+        WR1
+        LD 6
+        WR2
+        LD 7
+        WR3
         BBL 0
         ORG 0100H
 ; PRINT A IN DECIMAL, SIGNED (QPRTD) OR UNSIGNED (QPRTU). QPDIG PRINTS THE
@@ -331,128 +335,6 @@ QDSUB:  CLC
 QDNO:   ISZ 3,QDLP
         BBL 0
         ORG 01B3H
-; SIGNED / AND %: DIVIDE THE MAGNITUDES. THE QUOTIENT IS NEGATIVE WHEN THE
-; SIGNS DIFFER (R0), THE REMAINDER WHEN THE DIVIDEND IS NEGATIVE (R1).
-QSDIV:  JMS QSPRE
-        JMS QUDIV
-        LD 0
-        JCN 4,QSDX
-        JMS QNEG
-QSDX:   BBL 0
-QSMOD:  JMS QSPRE
-        JMS QUDIV
-        JMS QREMA
-        LD 1
-        JCN 4,QSDX
-        JMS QNEG
-        BBL 0
-QSPRE:  LDM 0
-        XCH 0
-        LDM 0
-        XCH 1
-        LD 4
-        RAL
-        JCN 0AH,QSP1
-        JMS QNEG
-        LDM 1
-        XCH 0
-        LDM 1
-        XCH 1
-QSP1:   LD 8
-        RAL
-        JCN 0AH,QSP2
-        LD 8
-        CMA
-        XCH 8
-        LD 9
-        CMA
-        XCH 9
-        LD 10
-        CMA
-        XCH 10
-        LD 11
-        CMA
-        XCH 11
-        ISZ 11,QSP3
-        ISZ 10,QSP3
-        ISZ 9,QSP3
-        INC 8
-QSP3:   LD 0
-        RAR
-        CMC
-        TCC
-        XCH 0
-QSP2:   BBL 0
-        ORG 01F4H
-; B = THE STATUS REGISTER AT R0R1.
-QLDB:   LD 1
-        DCL
-        SRC 0
-        RD0
-        XCH 8
-        RD1
-        XCH 9
-        RD2
-        XCH 10
-        RD3
-        XCH 11
-        BBL 0
-        ORG 0200H
-; COMPARE A WITH B, RETURNING 1 OR 0 IN THE ACCUMULATOR. THE SIGNED
-; COMPARISONS FLIP THE SIGN BITS AND COMPARE UNSIGNED.
-QSLT:   JMS QFLIP
-QULT:   JMS QCMP
-        JCN 2,QCF
-QCT:    BBL 1
-QSGE:   JMS QFLIP
-QUGE:   JMS QCMP
-        JCN 2,QCT
-QCF:    BBL 0
-QSGT:   JMS QFLIP
-QUGT:   JMS QCMPR
-        JCN 2,QCF
-        BBL 1
-QSLE:   JMS QFLIP
-QULE:   JMS QCMPR
-        JCN 2,QCT
-        BBL 0
-QFLIP:  CLC
-        LDM 8
-        ADD 4
-        XCH 4
-        CLC
-        LDM 8
-        ADD 8
-        XCH 8
-        BBL 0
-; THE CARRY IS 1 IF A >= B (QCMP) OR B >= A (QCMPR).
-QCMP:   CLC
-        LD 7
-        SUB 11
-        CMC
-        LD 6
-        SUB 10
-        CMC
-        LD 5
-        SUB 9
-        CMC
-        LD 4
-        SUB 8
-        BBL 0
-QCMPR:  CLC
-        LD 11
-        SUB 7
-        CMC
-        LD 10
-        SUB 6
-        CMC
-        LD 9
-        SUB 5
-        CMC
-        LD 8
-        SUB 4
-        BBL 0
-        ORG 023FH
 ; STORE B, OR ITS LOW BYTE, AT MAIN-MEMORY ADDRESS A; THEN A = B.
 QSTIC:  LDM 0
         XCH 8
@@ -502,50 +384,7 @@ QMOVB:  LD 8
         LD 11
         XCH 7
         BBL 0
-        ORG 0270H
-; PRINT THE STRING AT R0R1 ON THIS PAGE.
-QS1:   FIM 14,0F0H
-        SRC 14
-QSL1:  FIN 2
-        LD 2
-        JCN 0CH,QSC1
-        LD 3
-        JCN 4,QSX1
-QSC1:  LD 2
-        WRR
-        LD 3
-        WRR
-        ISZ 1,QSL1
-        INC 0
-        JUN QSL1
-QSX1:  BBL 0
-S0001:
-        DB 0AH,064H,06FH,06EH,065H,0AH,0
-        ORG 028BH
-; A = THE INT AT MAIN-MEMORY ADDRESS A (BANK, REGISTER, CHARACTER).
-QLDI:   LD 5
-        DCL
-        LD 6
-        XCH 0
-        LD 7
-        XCH 1
-        SRC 0
-        RDM
-        XCH 4
-        INC 1
-        SRC 0
-        RDM
-        XCH 5
-        INC 1
-        SRC 0
-        RDM
-        XCH 6
-        INC 1
-        SRC 0
-        RDM
-        XCH 7
-        BBL 0
-        ORG 02A1H
+        ORG 01E4H
 ; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
 QCLR:   LDM 0
         XCH 12
@@ -564,7 +403,12 @@ QCLC:   SRC 0
         INC 12
         ISZ 13,QCLB
         BBL 0
-        ORG 02B6H
+        ORG 01F9H
+; DECREMENT THE CHAR AT R0R1, LEAVING IT IN A.
+QDECC:  JMS QLDA
+        JMS QDEC
+        JUN QSTAC
+        ORG 0200H
 ; A = -A, OR A = A + 1.
 QNEG:   LD 4
         CMA
@@ -583,7 +427,7 @@ QINC:   ISZ 7,QINCX
         ISZ 5,QINCX
         INC 4
 QINCX:  BBL 0
-        ORG 02CAH
+        ORG 0214H
 ; A = A - 1. DAC SETS THE CARRY WHEN NOTHING IS BORROWED.
 QDEC:   LD 7
         DAC
@@ -601,25 +445,27 @@ QDEC:   LD 7
         DAC
         XCH 4
 QDECX:  BBL 0
-        ORG 02DDH
-; STORE A, OR ITS LOW BYTE, IN THE STATUS REGISTER AT R0R1.
-QSTAC:  LDM 0
+        ORG 0227H
+; A = THE CHAR AT MAIN-MEMORY ADDRESS A.
+QLDIC:  LD 5
+        DCL
+        LD 6
+        XCH 0
+        LD 7
+        XCH 1
+        SRC 0
+        RDM
+        XCH 6
+        INC 1
+        SRC 0
+        RDM
+        XCH 7
+        LDM 0
         XCH 4
         LDM 0
         XCH 5
-QSTA:   LD 1
-        DCL
-        SRC 0
-        LD 4
-        WR0
-        LD 5
-        WR1
-        LD 6
-        WR2
-        LD 7
-        WR3
         BBL 0
-        ORG 02EDH
+        ORG 0239H
 ; A = A + B.
 QADD:   CLC
         LD 7
@@ -635,10 +481,7 @@ QADD:   CLC
         ADD 8
         XCH 4
         BBL 0
-        ORG 02FBH
-; THE END OF THE PROGRAM: A JUMP TO ITSELF.
-QEXIT:  JUN QEXIT
-        ORG 0300H
+        ORG 0247H
 ; A = A << 1.
 QSHL1:  CLC
         LD 7
@@ -654,7 +497,7 @@ QSHL1:  CLC
         RAL
         XCH 4
         BBL 0
-        ORG 030EH
+        ORG 0255H
 ; EXCHANGE A AND B.
 QXAB:   LD 4
         XCH 8
@@ -669,7 +512,35 @@ QXAB:   LD 4
         XCH 11
         XCH 7
         BBL 0
-        ORG 031BH
+        ORG 0262H
+; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
+QLDA:   LD 1
+        DCL
+        SRC 0
+        RD0
+        XCH 4
+        RD1
+        XCH 5
+        RD2
+        XCH 6
+        RD3
+        XCH 7
+        BBL 0
+        ORG 026EH
+; B = THE STATUS REGISTER AT R0R1.
+QLDB:   LD 1
+        DCL
+        SRC 0
+        RD0
+        XCH 8
+        RD1
+        XCH 9
+        RD2
+        XCH 10
+        RD3
+        XCH 11
+        BBL 0
+        ORG 027AH
 ; A = A % B UNSIGNED.
 QUMOD:  JMS QUDIV
 QREMA:  LD 12
@@ -681,9 +552,7 @@ QREMA:  LD 12
         LD 15
         XCH 7
         BBL 0
-        ORG 0326H
-; DECREMENT THE INT AT R0R1, LEAVING IT IN A.
-QDECV:  JMS QLDA
-        JMS QDEC
-        JUN QSTA
+        ORG 0285H
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
         END
