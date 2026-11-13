@@ -76,8 +76,8 @@ which `--reference` also selects for diagnostics. Both loops implement the
 same CPU behavior and instruction-cycle accounting. `tests/fast.py` checks
 that they produce identical output and final state.
 
-On the development Linux machine, complete BASIC benchmarks take about 0.9 s
-(e), 10.6 s (sieve), and 8.3 s (ttt). These are host execution times and depend
+On the development Linux machine, complete BASIC benchmarks take about 0.5 s
+(e), 10.7 s (sieve), and 3.3 s (ttt). These are host execution times and depend
 on the host and compiler. The benchmark tables below report instruction-cycle
 counts and estimated runtimes on 740 kHz hardware.
 
@@ -124,7 +124,7 @@ python3 basic/build.py --all                # rebuild both interpreter ROMs
 ```
 
 The examples include counting, Fibonacci, squares, numerical input, Mastermind and a
-192-digit decimal-spigot e benchmark, plus a ten-pass segmented sieve counting
+192-digit integer-spigot e benchmark, plus a ten-pass segmented sieve counting
 1899 odd primes. The sieve uses the same 200-element array and fits in 32 lines
 and 381 stored bytes. `@(I)` accesses the array and a trailing
 semicolon on `PRINT` suppresses the newline. The interpreter requires `--size`
@@ -133,7 +133,7 @@ are limited to 32 lines and 384 bytes of statement text including terminators.
 Keywords and variable names are uppercase; arithmetic wraps at 16 bits and has
 ordinary multiplication/division precedence. Strings are supported by `PRINT`.
 TTT uses the alternative `large.hex` profile: a 64-element array, 832 bytes of
-packed program storage, line numbers 1–255, and no `INPUT`. Its iterative
+packed program storage with numeric tokens, line numbers 1–255, and no `INPUT`. Its iterative
 alpha-beta search checks all three distinct openings and reports 6493 moves.
 Both interpreter profiles fit the original 4004 ROM and RAM limits.
 See [basic/README.md](basic/README.md) for the complete syntax, limits and errors.
@@ -149,9 +149,9 @@ waits; these are instruction cycles, each taking eight clock periods.
 
 | BASIC benchmark | Workload | Interpreter ROM | Instruction cycles | 740 kHz 4004 |
 | --- | --- | --- | ---: | ---: |
-| [sieve](basic/examples/sieve.bas) | Ten segmented passes; 1899 odd primes from 3 through 16383 | `basic.hex` | 10,875,546,541 | 117,573.48 s (32 h 39 min) |
-| [e](basic/examples/e.bas) | 192 digits using the factorial-series spigot | `basic.hex` | 935,396,425 | 10,112.39 s (2 h 48 min) |
-| [ttt](basic/examples/ttt.bas) | One iteration over three distinct openings; 6493 moves | `large.hex` | 8,688,987,816 | 93,935.00 s (26 h 5 min) |
+| [sieve](basic/examples/sieve.bas) | Ten segmented passes; 1899 odd primes from 3 through 16383 | `basic.hex` | 10,174,572,014 | 109,995.37 s (30 h 33 min) |
+| [e](basic/examples/e.bas) | 192 digits using the factorial-series spigot | `basic.hex` | 441,734,957 | 4,775.51 s (1 h 19 min) |
+| [ttt](basic/examples/ttt.bas) | One iteration over three distinct openings; 6493 moves | `large.hex` | 3,191,215,378 | 34,499.63 s (9 h 35 min) |
 
 The BASIC sieve uses segmentation to fit its 200-element array, so its timing
 should be reported separately from the unsegmented assembly and C versions.

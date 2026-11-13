@@ -179,13 +179,13 @@ python3 tests/basic_large.py
 
 The checked-in `.asm`, `.hex` and `.map` are reproducible outputs of
 `python3 basic/build.py --all`, using **`--size`** compilation. The interactive
-standard interpreter occupies 4,037 stored bytes and ends at ROM byte 4,040 of
+standard interpreter occupies 4,045 stored bytes and ends at ROM byte 4,048 of
 4,096, including placement gaps. Its arrays and 48-byte command scratch buffer
 use 2,024 of 2,048 main RAM nibbles (1,012 bytes); scalars use 72 of 128 status
 registers. The command buffer temporarily swaps with the first 48 bytes of
 source while a direct statement is parsed, then restores them. This permits
 direct commands and `NEW` even when all 384 program bytes are occupied. The
-packed larger-program profile ends at ROM byte 3,340. There is no parser
+packed larger-program profile ends at ROM byte 4,072. There is no parser
 recursion or dynamically allocated array; both original 4004 limits hold.
 
 ## Mastermind
@@ -221,21 +221,23 @@ total matches by consuming those counts, and subtracts exact matches to obtain
 misplaced matches. The secret integer in line 6 and the frequencies in lines
 2–4 must agree if you change the secret.
 
-The supplied three-guess game takes **1,514,714 instruction cycles**, about
-**16.38 seconds** at 740 kHz, excluding I/O waits. Interactive time depends on
+The supplied three-guess game takes **1,440,008 instruction cycles**, about
+**15.57 seconds** at 740 kHz, excluding I/O waits. Interactive time depends on
 your guesses and typing. Tests also verify the game in Intel's INTERP/4.
 
 ## e benchmark
 
-`examples/e.bas` is the same factorial-series decimal spigot used by the C and
+`examples/e.bas` is the same factorial-series integer spigot used by the C and
 assembly e benchmarks: 200 remainder entries produce 192 digits without floating
-point. Division and subtraction replace the remainder operator. The first output
-value is 27; subsequent output values are single digits, joined using `PRINT X;`.
-The BASIC program uses 20 lines and 220 stored bytes, including line terminators.
+point. Division and subtraction replace the remainder operator. Each sweep produces two digits with base-100 arithmetic; the first
+block is 271. Output pads subsequent blocks with a leading zero when needed
+and truncates the last block to exactly 192 digits. Intermediates stay below
+20,000, within the interpreter's unsigned 16-bit arithmetic.
+The BASIC program uses 27 lines and 305 stored bytes, including line terminators.
 
 It prints the `BASIC4` banner, 192 digits, a newline, then `done` and another newline.
-One complete load/run takes **935,396,425 instruction cycles**, about **10,112.39
-seconds (2 hours 48 minutes)** on a 740 kHz 4004, excluding I/O waits. Host
+One complete load/run takes **441,734,957 instruction cycles**, about **4,775.51
+seconds (1 hour 19 minutes)** on a 740 kHz 4004, excluding I/O waits. Host
 emulation is much faster. For a finite emulator budget, allow at least
 `-n:1200000000` cycles. Source is parsed and executed on the emulated CPU; there
 is no host-side BASIC translation or hard-coded e output.
@@ -265,8 +267,8 @@ segment. All odd divisors are considered, including composite divisors whose
 marking is redundant; this avoids storing a separate base-prime table.
 
 This is a segmented variant, so report its timings separately from the original
-unsegmented sieve. A complete ten-pass load/run takes **10,875,546,541 instruction
-cycles**, about **117,573.48 seconds (32 hours 39 minutes)** at 740 kHz, excluding
+unsegmented sieve. A complete ten-pass load/run takes **10,174,572,014 instruction
+cycles**, about **109,995.37 seconds (30 hours 33 minutes)** at 740 kHz, excluding
 I/O waits. Host emulation took about 11 seconds on the development machine.
 If using `-n`, allow `-n:12000000000`. Output is:
 
@@ -303,15 +305,19 @@ same C interpreter. It trades the large array and `INPUT` for program storage:
 | Line numbers | 1–65535 | 1–255 |
 | Integer array | `@(0)`–`@(199)` | `@(0)`–`@(63)` |
 | `INPUT` | Supported | Unsupported |
-| ROM end, including gaps | 4040 bytes | 3340 bytes |
+| ROM end, including gaps | 4048 bytes | 4072 bytes |
 | Main RAM | 2024 nibbles | 2024 nibbles |
-| Status registers | 72 | 64 |
+| Status registers | 72 | 87 |
 
 The larger profile loads ordinary ASCII BASIC on the 4004. Its native loader
-replaces statement keywords and `THEN` with single-byte tokens and removes
-whitespace outside strings. Each stored line also needs a one-byte line number
-and a zero terminator. Jumps scan these records rather than using a separate
-line-index table. Strings retain case and spaces. A colon outside a string and
+replaces statement keywords and `THEN` with single-byte tokens, encodes integer
+literals in one, three or four nonzero bytes, and removes whitespace outside
+strings. Integer tokens are decoded during execution; an overflowing literal
+raises error 2 only if execution reaches it. Each stored line also needs a
+one-byte line number and a zero terminator. An eight-entry cache in status
+registers holds recent branch destinations; a cache miss scans the packed
+records. Execution finds the next line from the statement parser's final
+position. Strings retain case and spaces. A colon outside a string and
 embedded NUL bytes are rejected. Otherwise the arithmetic and statements match
 the standard profile, except `INPUT`. Error 5 also covers line numbers above 255;
 error 7 covers array subscripts above 63. This profile does not run the e or sieve
@@ -325,11 +331,12 @@ board cells occupy 0–8, frames occupy 16–51, and the eight winning triples o
 56–63. No recursive calls or host-side search are required. The source has 91
 numbered lines and fits the packed source buffer.
 
-A complete native load/run takes **8,688,987,816 instruction cycles**, about
-**93,935.00 seconds (26 hours 5 minutes)** at 740 kHz, excluding I/O waits.
-Host emulation took about 8 seconds on the development machine. The regression
+A complete native load/run takes **3,191,215,378 instruction cycles**, about
+**34,499.63 seconds (9 hours 35 minutes)** at 740 kHz, excluding I/O waits.
+Host emulation took about 3 seconds on the development machine. The regression
 test runs the full search and checks the exact output; it also checks packed
-storage boundaries, CRLF input, branches, scalar `T` versus `THEN`, array bounds,
+storage boundaries, integer-token boundaries, deferred overflow errors, branch-cache
+eviction, CRLF input, branches, scalar `T` versus `THEN`, array bounds,
 and reproducible ROM builds. The standard interpreter includes the interactive command loop; the packed
 profile remains a load-once interpreter.
 
@@ -337,7 +344,5 @@ Interactive tests exercise repeated runs, direct statements, listing and reset,
 full line/text capacity, source preservation after errors, malformed input,
 CRLF, backspace/Delete, and a real POSIX pseudo-terminal. They also check that
 terminal settings are restored on exit. Forced-console tests run on Windows.
-Current benchmark counts above include the regenerated ROMs built with the
-latest compiler. Compared with the preceding ROMs, batch benchmarks use less
-than 1% more cycles; the interactive standard ROM retains the original 4 KB
-limit and the existing program and array capacities.
+Both profiles retain the original 4 KB ROM limit and the program and array
+capacities listed above.

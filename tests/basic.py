@@ -85,6 +85,7 @@ class Basic(unittest.TestCase):
     def test_e_spigot(self):
         from decimal import Decimal, localcontext
         source = (ROOT/'basic/examples/e.bas').read_text()
+        self.check_program_limits(source)
         with localcontext() as context:
             context.prec = 220
             digits = str(Decimal(1).exp()).replace('.', '')[:192]

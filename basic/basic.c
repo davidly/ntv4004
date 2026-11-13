@@ -25,10 +25,15 @@ char quitting;
 #endif
 char count, error, done, interactive;
 
+#ifdef LARGE
+/* Packed source has no whitespace outside string literals. */
+#define blanks()
+#else
 void blanks()
 {
     while (text[pos] == ' ' || text[pos] == 9) pos++;
 }
+#endif
 
 void need(char ch)
 {
@@ -40,6 +45,15 @@ unsigned number()
 {
     unsigned value;
     char ch;
+#ifdef LARGE
+    ch = text[pos++];
+    if (ch >= 128) return ch-128;
+    if (ch == 3) { error = 2; return 0; }
+    if (ch != 1 && ch != 2) { error = 1; return 0; }
+    value = text[pos++]-128;
+    if (ch == 2) value = value*128 + text[pos++]-128;
+    return value*128 + text[pos++]-128;
+#else
     value = 0;
     ch = text[pos];
     if (ch < '0' || ch > '9') error = 1;
@@ -50,6 +64,7 @@ unsigned number()
         ch = text[pos];
     }
     return value;
+#endif
 }
 
 /* A-Z are scalar slots; @(0)..@(199) share the remaining word slots.
@@ -58,7 +73,7 @@ unsigned destination()
 {
     unsigned index;
     char ch;
-    blanks();
+    /* Callers have already consumed leading whitespace. */
     ch = text[pos];
     if (ch >= 'A' && ch <= 'Z') { pos++; return ch-'A'; }
     if (ch != '@') { error = 1; return 0; }
@@ -78,7 +93,8 @@ unsigned atom()
     char ch;
     blanks();
     ch = text[pos];
-    if ((ch >= 'A' && ch <= 'Z') || ch == '@') value = vars[destination()];
+    if (ch >= 'A' && ch <= 'Z') { pos++; value = vars[ch-'A']; }
+    else if (ch == '@') value = vars[destination()];
     else value = number();
     blanks();
     return value;
@@ -114,12 +130,45 @@ unsigned expression()
 }
 
 #ifdef LARGE
+/* Branch cache uses status registers, leaving main RAM for source and data.
+   This profile loads one program and runs it once. Zero is not a line number. */
+char cached_target0; unsigned cached_offset0;
+char cached_target1; unsigned cached_offset1;
+char cached_target2; unsigned cached_offset2;
+char cached_target3; unsigned cached_offset3;
+char cached_target4; unsigned cached_offset4;
+char cached_target5; unsigned cached_offset5;
+char cached_target6; unsigned cached_offset6;
+char cached_target7; unsigned cached_offset7;
+__nibble cache_next;
 unsigned findline(unsigned target)
 {
     unsigned i;
+    char key;
+    if (!target || target > 255) { error = 4; return used; }
+    key = target;
+    if (key == cached_target0) return cached_offset0;
+    if (key == cached_target1) return cached_offset1;
+    if (key == cached_target2) return cached_offset2;
+    if (key == cached_target3) return cached_offset3;
+    if (key == cached_target4) return cached_offset4;
+    if (key == cached_target5) return cached_offset5;
+    if (key == cached_target6) return cached_offset6;
+    if (key == cached_target7) return cached_offset7;
     i = 0;
     while (i < used) {
-        if (text[i] == target) return i;
+        if (text[i] == target) {
+        if (cache_next == 0) { cached_target0 = key; cached_offset0 = i; }
+        else if (cache_next == 1) { cached_target1 = key; cached_offset1 = i; }
+        else if (cache_next == 2) { cached_target2 = key; cached_offset2 = i; }
+        else if (cache_next == 3) { cached_target3 = key; cached_offset3 = i; }
+        else if (cache_next == 4) { cached_target4 = key; cached_offset4 = i; }
+        else if (cache_next == 5) { cached_target5 = key; cached_offset5 = i; }
+        else if (cache_next == 6) { cached_target6 = key; cached_offset6 = i; }
+        else if (cache_next == 7) { cached_target7 = key; cached_offset7 = i; }
+        cache_next = (cache_next+1) & 7;
+        return i;
+        }
         i++;
         while (text[i]) i++;
         i++;
@@ -282,6 +331,31 @@ void save(char ch)
     else text[used++] = ch;
 }
 
+/* Nonzero integer tokens keep NUL exclusively as the line terminator.
+   128..255 encode 0..127; 1/2 prefix two/three base-128 digits.
+   Token 3 defers an overflowing literal's error until it is executed. */
+char packnumber(char ch)
+{
+    unsigned value;
+    char overflow;
+    value = 0; overflow = 0;
+    do {
+        if (value > 6553 || (value == 6553 && ch > '5')) overflow = 1;
+        value = value*10 + ch-'0';
+        ch = getchar();
+        while (ch == ' ' || ch == 9) ch = getchar();
+    } while (ch >= '0' && ch <= '9');
+    if (overflow) save(3);
+    else if (value < 128) save(value+128);
+    else {
+        if (value < 16384) save(1);
+        else { save(2); save(128+(value >> 14)); }
+        save(128+((value >> 7) & 127));
+        save(128+(value & 127));
+    }
+    return ch;
+}
+
 void packedline(char command)
 {
     char ch, next, quoted;
@@ -296,7 +370,9 @@ void packedline(char command)
     quoted = 0;
     ch = getchar();
     while (!error && ch != 13 && ch != 10) {
-        if (!quoted && command == 'F' && ch == 'T') {
+        if (!quoted && command != 'R' && ch >= '0' && ch <= '9') {
+            ch = packnumber(ch);
+        } else if (!quoted && command == 'F' && ch == 'T') {
             next = getchar();
             if (next == 'H') {
                 rneed('E'); rneed('N'); save(':');
@@ -320,14 +396,17 @@ void runprogram()
 #ifdef LARGE
     while (!error && !done && line < used) {
         pos = line+1;
-        line = pos;
-        while (text[line]) line++;
-        line++;
+        /* A taken branch supplies its own offset. Otherwise statement()
+           leaves pos at this line's terminator. */
+        line = used;
 #else
     while (!error && !done && line < count) {
         pos = offsets[line++];
 #endif
         statement();
+#ifdef LARGE
+        if (line == used) line = pos+1;
+#endif
     }
 }
 
