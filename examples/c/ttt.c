@@ -139,7 +139,7 @@ ttype winner2( move ) ttype move;
 
 MinMax( alpha, beta, depth, move ) ttype alpha; ttype beta; ttype depth; ttype move;
 {
-    ttype pieceMove, score;   /* better perf with char than int. out of registers so use stack */
+    ttype score;
 #ifdef __CC4__
     ttype p, value;  /* Board positions and scores fit in four bits. */
 #else
@@ -164,58 +164,44 @@ MinMax( alpha, beta, depth, move ) ttype alpha; ttype beta; ttype depth; ttype m
             return ScoreTie;
     }
 
-    if ( depth & 1 ) 
+    if (depth & 1)
     {
         value = ScoreMin;
-        pieceMove = PieceX;
-    }
-    else
-    {
-        value = ScoreMax;
-        pieceMove = PieceO;
-    }
-
-    for ( p = 0; p < 9; p++ )
-    {
-        if ( PieceBlank == g_board[ p ] )
+        for (p = 0; p < 9; p++)
         {
-            g_board[p] = pieceMove;
-            score = MinMax( alpha, beta, depth + 1, p );
-            g_board[p] = PieceBlank;
-
-            if ( depth & 1 ) 
+            if (PieceBlank == g_board[p])
             {
-                if ( ScoreWin == score )
-                    return ScoreWin;
-
-                if ( score > value )
+                g_board[p] = PieceX;
+                score = MinMax(alpha, beta, depth + 1, p);
+                g_board[p] = PieceBlank;
+                if (score == ScoreWin) return ScoreWin;
+                if (score > value)
                 {
                     value = score;
-
-                    if ( value >= beta )
-                        return value;
-                    if ( value > alpha )
-                        alpha = value;
-                }
-            }
-            else
-            {
-                if ( ScoreLose == score )
-                    return ScoreLose;
-
-                if ( score < value )
-                {
-                    value = score;
-
-                    if ( value <= alpha )
-                        return value;
-                    if ( value < beta )
-                        beta = value;
+                    if (value >= beta) return value;
+                    if (value > alpha) alpha = value;
                 }
             }
         }
+        return value;
     }
-
+    value = ScoreMax;
+    for (p = 0; p < 9; p++)
+    {
+        if (PieceBlank == g_board[p])
+        {
+            g_board[p] = PieceO;
+            score = MinMax(alpha, beta, depth + 1, p);
+            g_board[p] = PieceBlank;
+            if (score == ScoreLose) return ScoreLose;
+            if (score < value)
+            {
+                value = score;
+                if (value <= alpha) return value;
+                if (value < beta) beta = value;
+            }
+        }
+    }
     return value;
 }  /*MinMax*/
 

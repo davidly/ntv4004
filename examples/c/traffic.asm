@@ -46,8 +46,10 @@ L0006:
 L0010:
 L0007:
         FIM 0,010H
-        JMS QLDA
-        LD 7
+        LD 1
+        DCL
+        SRC 0
+        RD3
         JCN 4,L0006
 ; PRESSED = 0;
         FIM 4,0
@@ -275,8 +277,10 @@ L0029:
 L0033:
 ; IF (!PRESSED && ??ROM?IN(READY)) (
         FIM 0,010H
-        JMS QLDA
-        LD 7
+        LD 1
+        DCL
+        SRC 0
+        RD3
         JCN 0CH,L0037
         FIM 0EH,0E0H
         SRC 0EH
@@ -338,7 +342,7 @@ F0003:
         WRR
         FIM 0,090H
         JUN QRETF
-        ORG 0208H
+        ORG 020AH
 ; PRINT THE STRING AT R0R1 ON THIS PAGE.
 QS1:   FIM 14,0F0H
         SRC 14
@@ -365,7 +369,7 @@ S0003:
         DB 077H,061H,06CH,06BH,0AH,0
 S0004:
         DB 072H,06FH,061H,064H,020H,067H,072H,065H,065H,06EH,0AH,0
-        ORG 025CH
+        ORG 025EH
 ; COMPARE A WITH B, RETURNING 1 OR 0 IN THE ACCUMULATOR. THE SIGNED
 ; COMPARISONS FLIP THE SIGN BITS AND COMPARE UNSIGNED.
 QSLT:   JMS QFLIP
@@ -420,7 +424,7 @@ QCMPR:  CLC
         LD 8
         SUB 4
         BBL 0
-        ORG 029BH
+        ORG 029DH
 ; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
 QTST:   LD 4
         JCN 0CH,QTT
@@ -442,7 +446,7 @@ QNOTZ:  LD 4
         JCN 0CH,QZF
         BBL 1
 QZF:    BBL 0
-        ORG 02B7H
+        ORG 02B9H
 ; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
 QCLR:   LDM 0
         XCH 12
@@ -461,7 +465,7 @@ QCLC:   SRC 0
         INC 12
         ISZ 13,QCLB
         BBL 0
-        ORG 02CCH
+        ORG 02CEH
 ; A = -A, OR A = A + 1.
 QNEG:   LD 4
         CMA
@@ -480,7 +484,7 @@ QINC:   ISZ 7,QINCX
         ISZ 5,QINCX
         INC 4
 QINCX:  BBL 0
-        ORG 02E0H
+        ORG 02E2H
 ; A = A - 1. DAC SETS THE CARRY WHEN NOTHING IS BORROWED.
 QDEC:   LD 7
         DAC
@@ -498,19 +502,19 @@ QDEC:   LD 7
         DAC
         XCH 4
 QDECX:  BBL 0
-        ORG 02F3H
-; A = A CHARACTER FROM THE CONSOLE.
-QGETC:  FIM 14,0F0H
-        SRC 14
-        RDR
-        XCH 6
-        RDR
-        XCH 7
+        ORG 02F5H
+; A = THE ACCUMULATOR, 0 OR 1.
+QBOOL:  XCH 7
         LDM 0
-        XCH 4
+        XCH 6
         LDM 0
         XCH 5
+        LDM 0
+        XCH 4
         BBL 0
+        ORG 02FDH
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
         ORG 0300H
 ; RETURN FROM A FUNCTION: R0R1 ADDRESSES ITS RETURN NUMBER, AN OFFSET
 ; INTO THE TABLE OF JUMPS THAT FOLLOWS ON THIS PAGE.
@@ -560,6 +564,19 @@ QSTA:   LD 1
         WR3
         BBL 0
         ORG 033CH
+; A = A CHARACTER FROM THE CONSOLE.
+QGETC:  FIM 14,0F0H
+        SRC 14
+        RDR
+        XCH 6
+        RDR
+        XCH 7
+        LDM 0
+        XCH 4
+        LDM 0
+        XCH 5
+        BBL 0
+        ORG 0348H
 ; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
 QLDA:   LD 1
         DCL
@@ -573,27 +590,14 @@ QLDA:   LD 1
         RD3
         XCH 7
         BBL 0
-        ORG 0348H
-; A = THE ACCUMULATOR, 0 OR 1.
-QBOOL:  XCH 7
-        LDM 0
-        XCH 6
-        LDM 0
-        XCH 5
-        LDM 0
-        XCH 4
-        BBL 0
-        ORG 0350H
+        ORG 0354H
 ; DECREMENT THE INT AT R0R1, LEAVING IT IN A.
 QDECV:  JMS QLDA
         JMS QDEC
         JUN QSTA
-        ORG 0356H
+        ORG 035AH
 ; INCREMENT THE INT AT R0R1, LEAVING IT IN A.
 QINCV:  JMS QLDA
         JMS QINC
         JUN QSTA
-        ORG 035CH
-; THE END OF THE PROGRAM: A JUMP TO ITSELF.
-QEXIT:  JUN QEXIT
         END

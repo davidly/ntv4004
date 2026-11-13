@@ -15,7 +15,8 @@ it too. The language is C without pointers, structures or floating point:
   4002 status characters, one register (4 nibbles) each, or four __nibbles
   to a register; arrays live in main memory. Global initializers must be
   constant.
-* Functions with parameters and return values, including recursion. The
+* Functions with parameters and return values, including recursion. Single-use
+  leaf functions without user labels are inlined. The
   4004's three-level stack is left to the runtime library: calls jump, and
   return through a table indexed by a return number stored with the callee.
   A call that can reach the caller again first saves the caller's
@@ -2488,6 +2489,7 @@ class Compiler:
         self.return_sites = []
         self.loops = []
         self.code = []
+        self.inline_exit = None
 
     def compile(self):
         self.analyze()
@@ -2497,6 +2499,8 @@ class Compiler:
             self.return_sites.append('QINTR')
             self.used.add('QSTAC')
         for f in self.reachable:
+            if f.name in self.inlined:
+                continue
             self.code = []
             self.live = live_after_calls(f)
             self.function, self.depth, self.last_line, self.a_holds = f, 0, None, None
@@ -2552,6 +2556,16 @@ class Compiler:
             order += served
         self.reachable = [self.functions[n] for n in order]
         self.recursive = any(f.name in self.reach[f.name] for f in self.reachable)
+        call_counts = {}
+        for owner in self.reachable:
+            for e in expressions(owner.body):
+                if e.kind == 'call':
+                    call_counts[e.name] = call_counts.get(e.name, 0) + 1
+        # A single-use leaf can share its caller's instruction stream without
+        # a software-call return slot or a second copy of its body.
+        self.inlined = {f.name for f in self.reachable if f.name != 'main' and not f.interrupt
+                        and not f.user_labels and call_counts.get(f.name) == 1
+                        and not any(e.kind == 'call' for e in expressions(f.body))}
         self.infer_narrow()
         names = set(asm4.MNEMONICS) | asm4.DIRECTIVES | asm4.OPERATORS
         keys = set()
@@ -3120,6 +3134,12 @@ class Compiler:
             return self.jcn(9 if when else 1, label)
         if e.kind == 'binary' and e.op in COMPARISONS and self.narrow(e.l) and self.narrow(e.r):
             return self.narrow_branch(e.op, e.l, e.r, label, when)
+        if not self.size and e.kind == 'binary' and e.op == '&' and 1 in (fold(e.l), fold(e.r)):
+            operand = e.l if fold(e.r) == 1 else e.r
+            if self.read_nibble(operand):
+                self.op('RAR')
+                self.jcn(2 if when else 0xA, label)
+                return
         plain = not (e.kind == 'binary' and (e.op in COMPARISONS or e.op == '&' and 1 in (fold(e.l), fold(e.r)))
                      or e.kind == 'index' and e.var.ctype == 'bool')
         if plain and self.narrow(e):
@@ -3127,12 +3147,82 @@ class Compiler:
         self.flag(e)
         self.jcn(0xC if when else 4, label)
 
+    def nibble_source(self, e):
+        """A direct nibble operand, without arithmetic or function calls."""
+        k = fold(e)
+        if k is not None:
+            return ('constant', k) if k < 16 else None
+        if e.kind == 'var' and self.narrow(e, 4):
+            v = e.var
+            if v.volatile and v.ctype != 'nibble':
+                return None
+            cached = v if v.ctype == 'nibble' else v.slot
+            if not v.volatile and self.a_holds is cached:
+                return ('cached',)
+            return ('status', v.slot, v.nib if v.ctype == 'nibble' else 3)
+        if e.kind == 'index' and e.var.ctype == 'nibble':
+            if fold(e.index) is not None:
+                return ('memory', self.constant_address(e))
+            if e.var.base & 15 == 0 and self.narrow(e.index, 4) and self.nibble_source(e.index) is not None:
+                return ('indexed', e.var.base, e.index)
+        return None
+
+    def read_nibble(self, e):
+        source = self.nibble_source(e)
+        if source is None:
+            return False
+        held = self.a_holds
+        if source[0] == 'constant':
+            self.op('LDM', source[1])
+        elif source[0] == 'cached':
+            self.op('LD', 7)
+        elif source[0] == 'status':
+            self.op('FIM', 0, source[1])
+            self.op('LD', 1)
+            self.op('DCL')
+            self.op('SRC', 0)
+            self.op('RD'+str(source[2]))
+        elif source[0] == 'indexed':
+            self.read_nibble(source[2])
+            self.op('XCH', 1)
+            self.op('LDM', (source[1] & 255) >> 4)
+            self.op('XCH', 0)
+            self.op('LDM', (source[1] >> 8) & 7)
+            self.op('DCL')
+            self.op('SRC', 0)
+            self.op('RDM')
+        else:
+            self.op('FIM', 0, source[1] & 255)
+            self.op('LDM', (source[1] >> 8) & 7)
+            self.op('DCL')
+            self.op('SRC', 0)
+            self.op('RDM')
+        self.a_holds = held  # Only ACC, addressing and bank selection changed.
+        return True
+
     def narrow_branch(self, op, left, right, label, when):
         """Jump if (left op right) is when, comparing in place the low bytes, or the
         low nibbles when both sides fit in 4 bits."""
         if fold(left) is not None and fold(right) is None:
             left, right, op = right, left, MIRROR[op]
         k = fold(right)
+        if (not self.size and self.narrow(left, 4) and self.narrow(right, 4)
+                and self.nibble_source(left) is not None and self.nibble_source(right) is not None):
+            if k == 0 and op in ('==', '!=', '>', '<='):
+                self.read_nibble(left)
+                self.jcn(4 if (op in ('==', '<=')) == when else 0xC, label)
+                return
+            x, y = (left, right) if op in ('==', '!=', '>=', '<') else (right, left)
+            self.read_nibble(y)
+            self.op('XCH', 12)
+            self.read_nibble(x)
+            self.op('CLC')
+            self.op('SUB', 12)
+            if op in ('==', '!='):
+                self.jcn(4 if (op == '==') == when else 0xC, label)
+            else:
+                self.jcn(2 if (op in ('>=', '<=')) == when else 0xA, label)
+            return
         if k == 0:  # against zero: test the nibbles
             if op in ('>=', '<'):
                 if (op == '>=') == when:
@@ -3197,6 +3287,9 @@ class Compiler:
 
     def narrow_zero(self, e, label, if_zero):
         """Jump if narrow e is zero (if_zero) or nonzero."""
+        if not self.size and self.narrow(e, 4) and self.read_nibble(e):
+            self.jcn(4 if if_zero else 0xC, label)
+            return
         self.gen(e)
         if self.narrow(e, 4):
             self.op('LD', 7)
@@ -3268,6 +3361,28 @@ class Compiler:
 
     def incdec(self, e, need):
         target, line = e.target, e.line
+        if target.kind == 'var' and target.var.ctype == 'nibble':
+            v = target.var
+            self.op('FIM', 0, v.slot)
+            self.op('LD', 1)
+            self.op('DCL')
+            self.op('SRC', 0)
+            self.op('RD'+str(v.nib))
+            if need and not e.prefix:
+                self.op('XCH', 7)
+                self.op('LD', 7)
+            self.op('IAC' if e.op == '++' else 'DAC')
+            self.op('WR'+str(v.nib))
+            self.a_holds = None
+            if need:
+                if e.prefix:
+                    self.op('XCH', 7)
+                self.op('FIM', 4, 0)
+                self.op('LDM', 0)
+                self.op('XCH', 6)
+                if e.prefix:
+                    self.a_holds = v
+            return
         if need and not e.prefix:  # the old value, through a temporary
             self.gen(target)
             t = self.push_temp()
@@ -3332,6 +3447,17 @@ class Compiler:
                 self.store_var(param)
             for _ in temps:
                 self.pop_temp()
+        if f.name in self.inlined:
+            end = self.label()
+            saved = self.function, self.depth, self.loops, self.inline_exit
+            self.function, self.depth, self.loops, self.inline_exit = f, 0, [], (f, end)
+            try:
+                self.statement(f.body)
+                self.place(end, True)
+            finally:
+                self.function, self.depth, self.loops, self.inline_exit = saved
+            self.a_holds = None
+            return
         site = self.label()
         self.return_sites.append(site)
         self.op('FIM', 6, 4 + 2 * (len(self.return_sites) - 1))
@@ -3549,6 +3675,9 @@ class Compiler:
     # statements
 
     def epilogue(self):
+        if self.inline_exit is not None and self.inline_exit[0] is self.function:
+            self.jump(self.inline_exit[1])
+            return
         f = self.function
         if f.name == 'main':
             self.used.add('QEXIT')

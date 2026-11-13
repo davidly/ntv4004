@@ -93,77 +93,99 @@ L0003:
         FIM 4,0
         FIM 6,0
         JUN QEXIT
-WINNE:
-; WINNER2
+MINMA:
+; MINMAX
+; TTYPE SCORE;
+; TTYPE P, VALUE;  /* BOARD POSITIONS AND SCORES FIT IN FOUR BITS. */
+; G?IMOVES++;
+        FIM 0,020H
+        JMS QINCV
+; IF ( DEPTH >= 4 )
+        LDM 4
+        XCH 0CH
+        FIM 0,080H
+        LD 1
+        DCL
+        SRC 0
+        RD2
+        CLC
+        SUB 0CH
+        JCN 2,$+4
+        JUN L0004
+; P = WINNER2(MOVE);
+        FIM 0,080H
+        JMS QLDN3
+        FIM 0,060H
+        JMS QSTN0
 ; TTYPE X;
 ; SWITCH( MOVE )
-        FIM 0,060H
-        JMS QLDN0
         LDM 0
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 4,L0005
-        LDM 1
-        XCH 0BH
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,$+4
-        JUN L0006
-        LDM 2
         XCH 0BH
         CLC
         LD 7
         SUB 0BH
         JCN 0CH,$+4
         JUN L0007
-        LDM 3
+        LDM 1
         XCH 0BH
         CLC
         LD 7
         SUB 0BH
         JCN 0CH,$+4
         JUN L0008
-        LDM 4
+        LDM 2
         XCH 0BH
         CLC
         LD 7
         SUB 0BH
         JCN 0CH,$+4
         JUN L0009
-        LDM 5
+        LDM 3
         XCH 0BH
         CLC
         LD 7
         SUB 0BH
         JCN 0CH,$+4
         JUN L0010
-        LDM 6
+        LDM 4
         XCH 0BH
         CLC
         LD 7
         SUB 0BH
         JCN 0CH,$+4
         JUN L0011
-        LDM 7
+        LDM 5
         XCH 0BH
         CLC
         LD 7
         SUB 0BH
         JCN 0CH,$+4
         JUN L0012
-        LDM 8
+        LDM 6
         XCH 0BH
         CLC
         LD 7
         SUB 0BH
         JCN 0CH,$+4
         JUN L0013
-        JUN L0004
+        LDM 7
+        XCH 0BH
+        CLC
+        LD 7
+        SUB 0BH
+        JCN 0CH,$+4
+        JUN L0014
+        LDM 8
+        XCH 0BH
+        CLC
+        LD 7
+        SUB 0BH
+        NOP
+        JCN 0CH,$+4
+        JUN L0015
+        JUN L0006
 ; CASE 0:
-L0005:
+L0007:
 ; X = G?BOARD( 0 );
         FIM 4,0
         FIM 6,0
@@ -173,78 +195,80 @@ L0005:
 ; IF ( ( ( X == G?BOARD(1) ) && ( X == G?BOARD(2) ) ) ??
         FIM 0,1
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        NOP
-        JCN 4,$+4
-        JUN L0016
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0018
         FIM 0,2
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,$+4
-        JUN L0015
-L0016:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0017
+L0018:
         FIM 0,3
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0017
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0019
         FIM 0,6
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0015
-L0017:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0017
+L0019:
         FIM 0,4
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0014
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0016
         FIM 0,8
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0014
-L0015:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0016
+L0017:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0014:
+        JUN L0005
+L0016:
 ; BREAK;
-        JUN L0004
+        JUN L0006
 ; CASE 1:
-L0006:
+L0008:
 ; X = G?BOARD( 1 );
         FIM 4,0
         FIM 6,1
@@ -254,56 +278,59 @@ L0006:
 ; IF ( ( ( X == G?BOARD(0) ) && ( X == G?BOARD(2) ) ) ??
         FIM 0,0
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0020
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0022
         FIM 0,2
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0019
-L0020:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0021
+L0022:
         FIM 0,4
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0018
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0020
         FIM 0,7
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0018
-L0019:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0020
+L0021:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0018:
+        JUN L0005
+L0020:
 ; BREAK;
-        JUN L0004
+        JUN L0006
 ; CASE 2:
-L0007:
+L0009:
 ; X = G?BOARD( 2 );
         FIM 4,0
         FIM 6,2
@@ -313,79 +340,80 @@ L0007:
 ; IF ( ( ( X == G?BOARD(0) ) && ( X == G?BOARD(1) ) ) ??
         FIM 0,0
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0023
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0025
         FIM 0,1
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,$+4
-        JUN L0022
-L0023:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0024
+L0025:
         FIM 0,5
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0024
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0026
         FIM 0,8
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,$+4
-        JUN L0022
-L0024:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0024
+L0026:
         FIM 0,4
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,$+4
-        JUN L0004
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0023
         FIM 0,6
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,$+4
-        JUN L0021
-L0022:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0023
+L0024:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0021:
+        JUN L0005
+L0023:
 ; BREAK;
-        JUN L0004
+        JUN L0006
 ; CASE 3:
-L0008:
+L0010:
 ; X = G?BOARD( 3 );
         FIM 4,0
         FIM 6,3
@@ -395,56 +423,59 @@ L0008:
 ; IF ( ( ( X == G?BOARD(4) ) && ( X == G?BOARD(5) ) ) ??
         FIM 0,4
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0027
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0029
         FIM 0,5
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0026
-L0027:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0028
+L0029:
         FIM 0,0
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0025
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0027
         FIM 0,6
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0025
-L0026:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0027
+L0028:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0025:
+        JUN L0005
+L0027:
 ; BREAK;
-        JUN L0004
+        JUN L0006
 ; CASE 4:
-L0009:
+L0011:
 ; X = G?BOARD( 4 );
         FIM 4,0
         FIM 6,4
@@ -454,94 +485,101 @@ L0009:
 ; IF ( ( ( X == G?BOARD(0) ) && ( X == G?BOARD(8) ) ) ??
         FIM 0,0
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0030
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0032
         FIM 0,8
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0029
-L0030:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0031
+L0032:
         FIM 0,2
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0031
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0033
         FIM 0,6
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0029
-L0031:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0031
+L0033:
         FIM 0,1
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0032
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0034
         FIM 0,7
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0029
-L0032:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0031
+L0034:
         FIM 0,3
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0028
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0030
         FIM 0,5
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0028
-L0029:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0030
+L0031:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0028:
+        JUN L0005
+L0030:
 ; BREAK;
-        JUN L0004
+        JUN L0006
 ; CASE 5:
-L0010:
+L0012:
 ; X = G?BOARD( 5 );
         FIM 4,0
         FIM 6,5
@@ -551,58 +589,59 @@ L0010:
 ; IF ( ( ( X == G?BOARD(3) ) && ( X == G?BOARD(4) ) ) ??
         FIM 0,3
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,$+4
-        JUN L0035
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0037
         FIM 0,4
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,$+4
-        JUN L0034
-L0035:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0036
+L0037:
         FIM 0,2
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0033
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0035
         FIM 0,8
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0033
-L0034:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0035
+L0036:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0033:
+        JUN L0005
+L0035:
 ; BREAK;
-        JUN L0004
+        JUN L0006
 ; CASE 6:
-L0011:
+L0013:
 ; X = G?BOARD( 6 );
         FIM 4,0
         FIM 6,6
@@ -612,75 +651,81 @@ L0011:
 ; IF ( ( ( X == G?BOARD(7) ) && ( X == G?BOARD(8) ) ) ??
         FIM 0,7
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0038
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,$+4
+        JUN L0040
         FIM 0,8
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0037
-L0038:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0039
+L0040:
         FIM 0,0
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0039
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0041
         FIM 0,3
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0037
-L0039:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0039
+L0041:
         FIM 0,4
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0036
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0006
         FIM 0,2
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0036
-L0037:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0006
+L0039:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0036:
+        JUN L0005
+L0038:
 ; BREAK;
-        JUN L0004
+        JUN L0006
 ; CASE 7:
-L0012:
+L0014:
 ; X = G?BOARD( 7 );
         FIM 4,0
         FIM 6,7
@@ -690,56 +735,59 @@ L0012:
 ; IF ( ( ( X == G?BOARD(6) ) && ( X == G?BOARD(8) ) ) ??
         FIM 0,6
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0042
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0044
         FIM 0,8
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0041
-L0042:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0043
+L0044:
         FIM 0,1
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0040
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0006
         FIM 0,4
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0040
-L0041:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0006
+L0043:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0040:
+        JUN L0005
+L0042:
 ; BREAK;
-        JUN L0004
+        JUN L0006
 ; CASE 8:
-L0013:
+L0015:
 ; X = G?BOARD( 8 );
         FIM 4,0
         FIM 6,8
@@ -749,75 +797,78 @@ L0013:
 ; IF ( ( ( X == G?BOARD(6) ) && ( X == G?BOARD(7) ) ) ??
         FIM 0,6
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,$+4
-        JUN L0045
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0047
         FIM 0,7
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,$+4
-        JUN L0044
-L0045:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0046
+L0047:
         FIM 0,2
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0046
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0048
         FIM 0,5
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 4,L0044
-L0046:
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 4,L0046
+L0048:
         FIM 0,0
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0043
-        FIM 0,060H
-        JMS QLDN1
+        CLC
+        SUB 0CH
+        JCN 0CH,L0045
         FIM 0,4
         LDM 0
-        JMS QLBIN
-        CLC
+        DCL
+        SRC 0
+        RDM
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0043
-L0044:
+        CLC
+        SUB 0CH
+        JCN 0CH,L0045
+L0046:
 ; RETURN X;
-        FIM 0,060H
-        JMS QLDN1
         LDM 0
         XCH 4
         LDM 0
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-L0043:
+        JUN L0005
+L0045:
 ; BREAK;
-L0004:
+L0006:
 ; RETURN PIECEBLANK;
         FIM 4,0
         FIM 6,0
@@ -827,44 +878,21 @@ L0004:
         XCH 5
         LDM 0
         XCH 6
-        FIM 0,050H
-        JUN QRETF
-MINMA:
-; MINMAX
-; TTYPE PIECEMOVE, SCORE;   /* BETTER PERF WITH CHAR THAN INT. OUT OF RE
-; TTYPE P, VALUE;  /* BOARD POSITIONS AND SCORES FIT IN FOUR BITS. */
-; G?IMOVES++;
-        FIM 0,020H
-        JMS QINCV
-; IF ( DEPTH >= 4 )
-        FIM 0,080H
-        JMS QLDN2
-        FIM 0AH,4
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0AH,L0047
-; P = WINNER2(MOVE);
-        FIM 0,080H
-        JMS QLDN3
-        FIM 0,060H
-        JMS QSTN0
-        FIM 6,0AH
-        FIM 0,050H
-        JMS QSTAC
-        JUN WINNE
-L0048:
+L0005:
         FIM 0,090H
-        JMS QSTN2
+        JMS QSTN1
 ; IF ( PIECEBLANK != P )
         LD 7
-        JCN 4,L0049
+        JCN 0CH,$+4
+        JUN L0049
 ; IF ( PIECEX == P )
-        FIM 0AH,1
-        CLC
+        LDM 1
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0CH,L0050
+        CLC
+        SUB 0CH
+        JCN 4,$+4
+        JUN L0050
 ; RETURN SCOREWIN;
         FIM 4,0
         FIM 6,6
@@ -878,12 +906,15 @@ L0050:
         JUN QRETF
 L0049:
 ; IF ( 8 == DEPTH )
+        LDM 8
+        XCH 0CH
         FIM 0,080H
-        JMS QLDN2
-        FIM 0AH,8
+        LD 1
+        DCL
+        SRC 0
+        RD2
         CLC
-        LD 7
-        SUB 0BH
+        SUB 0CH
         JCN 0CH,L0051
 ; RETURN SCORETIE;
         FIM 4,0
@@ -891,54 +922,49 @@ L0049:
         FIM 0,070H
         JUN QRETF
 L0051:
-L0047:
-; IF ( DEPTH & 1 )
-        JMS QODD
-        JCN 4,L0053
+L0004:
+; IF (DEPTH & 1)
+        FIM 0,080H
+        LD 1
+        DCL
+        SRC 0
+        RD2
+        RAR
+        JCN 2,$+4
+        JUN L0052
 ; VALUE = SCOREMIN;
         FIM 4,0
         FIM 6,2
         FIM 0,090H
-        JMS QSTN3
-; PIECEMOVE = PIECEX;
-        FIM 4,0
-        FIM 6,1
-        FIM 0,090H
-        JMS QSTN0
-        JUN L0052
-L0053:
-; VALUE = SCOREMAX;
-        FIM 4,0
-        FIM 6,9
-        FIM 0,090H
-        JMS QSTN3
-; PIECEMOVE = PIECEO;
-        FIM 4,0
-        FIM 6,2
-        FIM 0,090H
-        JMS QSTN0
-L0052:
-; FOR ( P = 0; P < 9; P++ )
+        JMS QSTN2
+; FOR (P = 0; P < 9; P++)
         FIM 4,0
         FIM 6,0
         FIM 0,090H
-        JMS QSTN2
-        JUN L0055
-L0054:
-; IF ( PIECEBLANK == G?BOARD( P ) )
+        JMS QSTN1
+        JUN L0054
+L0053:
+; IF (PIECEBLANK == G?BOARD(P))
         FIM 0,090H
-        JMS QLDN2
-        JMS QLDIN
-        LD 7
-        JCN 4,$+4
-        JUN L0058
-; G?BOARD(P) = PIECEMOVE;
+        LD 1
+        DCL
+        SRC 0
+        RD1
+        XCH 1
+        LDM 0
+        XCH 0
+        LDM 0
+        DCL
+        SRC 0
+        RDM
+        JCN 0CH,L0057
+; G?BOARD(P) = PIECEX;
         FIM 0,090H
-        JMS QLDN2
-        FIM 0,090H
-        JMS QLBN0
+        JMS QLDN1
+        FIM 8,0
+        FIM 0AH,1
         JMS QSTIN
-; SCORE = MINMAX( ALPHA, BETA, DEPTH + 1, P );
+; SCORE = MINMAX(ALPHA, BETA, DEPTH + 1, P);
         FIM 0,070H
         LDM 0DH
         XCH 0DH
@@ -949,161 +975,269 @@ L0054:
         FIM 0,080H
         JMS QSTN2
         FIM 0,090H
-        JMS QLDN2
+        JMS QLDN1
         FIM 0,080H
         JMS QSTN3
-        FIM 6,0CH
+        FIM 6,0AH
         FIM 0,070H
         JMS QSTAC
         JUN MINMA
-L0059:
+L0058:
         FIM 0,070H
         FIM 2,0F4H
         LDM 0DH
         XCH 0DH
         JMS QRSTR
         FIM 0,090H
-        JMS QSTN1
+        JMS QSTN0
 ; G?BOARD(P) = PIECEBLANK;
         FIM 0,090H
-        JMS QLDN2
+        JMS QLDN1
         FIM 8,0
         FIM 0AH,0
         JMS QSTIN
-; IF ( DEPTH & 1 )
-        FIM 0,080H
-        JMS QLDN2
-        JMS QODD
-        JCN 4,L0061
-; IF ( SCOREWIN == SCORE )
+; IF (SCORE == SCOREWIN) RETURN SCOREWIN;
+        LDM 6
+        XCH 0CH
         FIM 0,090H
-        JMS QLDN1
-        FIM 0AH,6
+        LD 1
+        DCL
+        SRC 0
+        RD0
         CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,L0062
-; RETURN SCOREWIN;
+        SUB 0CH
+        JCN 0CH,L0059
         FIM 4,0
         FIM 6,6
         FIM 0,070H
         JUN QRETF
-L0062:
-; IF ( SCORE > VALUE )
+L0059:
+; IF (SCORE > VALUE)
         FIM 0,090H
-        JMS QLBN3
+        LD 1
+        DCL
+        SRC 0
+        RD0
+        XCH 0CH
+        FIM 0,090H
+        LD 1
+        DCL
+        SRC 0
+        RD2
         CLC
-        LD 0BH
-        SUB 7
+        SUB 0CH
         JCN 2,L0060
 ; VALUE = SCORE;
         FIM 0,090H
-        JMS QLDN1
+        JMS QLDN0
         FIM 0,090H
-        JMS QSTN3
-; IF ( VALUE >= BETA )
+        JMS QSTN2
+; IF (VALUE >= BETA) RETURN VALUE;
         FIM 0,080H
-        JMS QLBN1
-        CLC
+        LD 1
+        DCL
+        SRC 0
+        RD1
+        XCH 0CH
         LD 7
-        SUB 0BH
-        JCN 0AH,L0064
-; RETURN VALUE;
-        FIM 0,090H
-        JMS QLDN3
+        CLC
+        SUB 0CH
+        JCN 0AH,L0061
         FIM 0,070H
         JUN QRETF
-L0064:
-; IF ( VALUE > ALPHA )
-        FIM 0,090H
-        JMS QLDN3
+L0061:
+; IF (VALUE > ALPHA) ALPHA = VALUE;
+        LD 7
+        XCH 0CH
         FIM 0,080H
-        JMS QLBN0
+        LD 1
+        DCL
+        SRC 0
+        RD0
         CLC
-        LD 0BH
-        SUB 7
-        JCN 2,L0060
-; ALPHA = VALUE;
-        FIM 0,090H
-        JMS QLDN3
+        SUB 0CH
+        JCN 2,L0062
         FIM 0,080H
         JMS QSTN0
-L0065:
+L0062:
+L0060:
+L0057:
+        FIM 0,090H
+        LD 1
+        DCL
+        SRC 0
+        RD1
+        IAC
+        WR1
+L0054:
+        LDM 9
+        XCH 0CH
+        FIM 0,090H
+        LD 1
+        DCL
+        SRC 0
+        RD1
+        CLC
+        SUB 0CH
+        JCN 2,$+4
+        JUN L0053
+; RETURN VALUE;
+        FIM 0,090H
+        JMS QLDN2
+        FIM 0,070H
+        JUN QRETF
+L0052:
+; VALUE = SCOREMAX;
+        FIM 4,0
+        FIM 6,9
+        FIM 0,090H
+        JMS QSTN2
+; FOR (P = 0; P < 9; P++)
+        FIM 4,0
+        FIM 6,0
+        FIM 0,090H
+        JMS QSTN1
+        JUN L0064
 L0063:
-        JUN L0060
-L0061:
-; IF ( SCORELOSE == SCORE )
+; IF (PIECEBLANK == G?BOARD(P))
+        FIM 0,090H
+        LD 1
+        DCL
+        SRC 0
+        RD1
+        XCH 1
+        LDM 0
+        XCH 0
+        LDM 0
+        DCL
+        SRC 0
+        RDM
+        JCN 0CH,L0067
+; G?BOARD(P) = PIECEO;
         FIM 0,090H
         JMS QLDN1
-        FIM 0AH,4
+        FIM 8,0
+        FIM 0AH,2
+        JMS QSTIN
+; SCORE = MINMAX(ALPHA, BETA, DEPTH + 1, P);
+        FIM 0,070H
+        LDM 0DH
+        XCH 0DH
+        JMS QSAVE
+        FIM 0,080H
+        JMS QLDN2
+        JMS QINC
+        FIM 0,080H
+        JMS QSTN2
+        FIM 0,090H
+        JMS QLDN1
+        FIM 0,080H
+        JMS QSTN3
+        FIM 6,0CH
+        FIM 0,070H
+        JMS QSTAC
+        JUN MINMA
+L0068:
+        FIM 0,070H
+        FIM 2,0F4H
+        LDM 0DH
+        XCH 0DH
+        JMS QRSTR
+        FIM 0,090H
+        JMS QSTN0
+; G?BOARD(P) = PIECEBLANK;
+        FIM 0,090H
+        JMS QLDN1
+        FIM 8,0
+        FIM 0AH,0
+        JMS QSTIN
+; IF (SCORE == SCORELOSE) RETURN SCORELOSE;
+        LDM 4
+        XCH 0CH
+        FIM 0,090H
+        LD 1
+        DCL
+        SRC 0
+        RD0
         CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,L0066
-; RETURN SCORELOSE;
+        SUB 0CH
+        JCN 0CH,L0069
         FIM 4,0
         FIM 6,4
         FIM 0,070H
         JUN QRETF
-L0066:
-; IF ( SCORE < VALUE )
+L0069:
+; IF (SCORE < VALUE)
         FIM 0,090H
-        JMS QLBN3
+        LD 1
+        DCL
+        SRC 0
+        RD2
+        XCH 0CH
+        FIM 0,090H
+        LD 1
+        DCL
+        SRC 0
+        RD0
         CLC
-        LD 7
-        SUB 0BH
-        JCN 2,L0067
+        SUB 0CH
+        JCN 2,L0070
 ; VALUE = SCORE;
         FIM 0,090H
-        JMS QLDN1
-        FIM 0,090H
-        JMS QSTN3
-; IF ( VALUE <= ALPHA )
-        FIM 0,080H
-        JMS QLBN0
-        CLC
-        LD 0BH
-        SUB 7
-        JCN 0AH,L0068
-; RETURN VALUE;
-        FIM 0,090H
-        JMS QLDN3
-        FIM 0,070H
-        JUN QRETF
-L0068:
-; IF ( VALUE < BETA )
-        FIM 0,090H
-        JMS QLDN3
-        FIM 0,080H
-        JMS QLBN1
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 2,L0069
-; BETA = VALUE;
-        FIM 0,090H
-        JMS QLDN3
-        FIM 0,080H
-        JMS QSTN1
-L0069:
-L0067:
-L0060:
-L0058:
-        FIM 0,090H
-        JMS QLDN2
-        JMS QINC
+        JMS QLDN0
         FIM 0,090H
         JMS QSTN2
-L0055:
-        FIM 0AH,9
-        CLC
+; IF (VALUE <= ALPHA) RETURN VALUE;
         LD 7
-        SUB 0BH
-        JCN 2,$+4
-        JUN L0054
+        XCH 0CH
+        FIM 0,080H
+        LD 1
+        DCL
+        SRC 0
+        RD0
+        CLC
+        SUB 0CH
+        JCN 0AH,L0071
+        FIM 0,070H
+        JUN QRETF
+L0071:
+; IF (VALUE < BETA) BETA = VALUE;
+        FIM 0,080H
+        LD 1
+        DCL
+        SRC 0
+        RD1
+        XCH 0CH
+        LD 7
+        CLC
+        SUB 0CH
+        JCN 2,L0072
+        FIM 0,080H
+        JMS QSTN1
+L0072:
+L0070:
+L0067:
+        FIM 0,090H
+        LD 1
+        DCL
+        SRC 0
+        RD1
+        IAC
+        WR1
+L0064:
+        LDM 9
+        XCH 0CH
+        FIM 0,090H
+        LD 1
+        DCL
+        SRC 0
+        RD1
+        CLC
+        SUB 0CH
+        JCN 0AH,L0063
 ; RETURN VALUE;
         FIM 0,090H
-        JMS QLDN3
+        JMS QLDN2
         FIM 0,070H
         JUN QRETF
 FINDS:
@@ -1114,8 +1248,8 @@ FINDS:
         FIM 6,0
         FIM 0,0C0H
         JMS QSTA
-        JUN L0071
-L0070:
+        JUN L0074
+L0073:
 ; G?BOARD( I ) = PIECEBLANK;
         FIM 0,0C0H
         JMS QLDA
@@ -1124,12 +1258,11 @@ L0070:
         JMS QSTIN
         FIM 0,0C0H
         JMS QINCV
-L0071:
+L0074:
         FIM 8,0
         FIM 0AH,9
         JMS QSLT
-        JCN 4,$+4
-        JUN L0070
+        JCN 0CH,L0073
 ; G?BOARD( POSITION ) = PIECEX;
         FIM 0,0B0H
         JMS QLDN0
@@ -1141,8 +1274,8 @@ L0071:
         FIM 6,0
         FIM 0,0C0H
         JMS QSTA
-        JUN L0075
-L0074:
+        JUN L0078
+L0077:
 ; G?IMOVES = 0;
         FIM 4,0
         FIM 6,0
@@ -1169,20 +1302,21 @@ L0074:
         FIM 0,070H
         JMS QSTAC
         JUN MINMA
-L0078:
+L0081:
         FIM 0,0C0H
         JMS QINCV
-L0075:
+L0078:
         FIM 0,010H
         JMS QLDB
         JMS QSLT
-        JCN 0CH,L0074
+        JCN 4,$+4
+        JUN L0077
 ; RETURN G?IMOVES;
         FIM 0,020H
         JMS QLDA
         FIM 0,0A0H
         JUN QRETF
-        ORG 0670H
+        ORG 0653H
 ; THE SAVE STACK, FOR RECURSION: ITS POINTER IS IN STATUS REGISTER 0 OF
 ; BANK 0 (BANK, REGISTER, CHARACTER IN STATUS CHARACTERS 1 TO 3), AND EACH
 ; SAVED STATUS REGISTER TAKES 4 CHARACTERS OF MAIN MEMORY.
@@ -1293,7 +1427,7 @@ QSSP:   FIM 8,00H
         LD 15
         WR3
         BBL 0
-        ORG 06E7H
+        ORG 06CAH
 ; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
 QCLR:   LDM 0
         XCH 12
@@ -1312,9 +1446,40 @@ QCLC:   SRC 0
         INC 12
         ISZ 13,QCLB
         BBL 0
-        ORG 06FCH
-; THE END OF THE PROGRAM: A JUMP TO ITSELF.
-QEXIT:  JUN QEXIT
+        ORG 06DFH
+; A = -A, OR A = A + 1.
+QNEG:   LD 4
+        CMA
+        XCH 4
+        LD 5
+        CMA
+        XCH 5
+        LD 6
+        CMA
+        XCH 6
+        LD 7
+        CMA
+        XCH 7
+QINC:   ISZ 7,QINCX
+        ISZ 6,QINCX
+        ISZ 5,QINCX
+        INC 4
+QINCX:  BBL 0
+        ORG 06F3H
+; EXCHANGE A AND B.
+QXAB:   LD 4
+        XCH 8
+        XCH 4
+        LD 5
+        XCH 9
+        XCH 5
+        LD 6
+        XCH 10
+        XCH 6
+        LD 7
+        XCH 11
+        XCH 7
+        BBL 0
         ORG 0700H
 ; RETURN FROM A FUNCTION: R0R1 ADDRESSES ITS RETURN NUMBER, AN OFFSET
 ; INTO THE TABLE OF JUMPS THAT FOLLOWS ON THIS PAGE.
@@ -1324,9 +1489,9 @@ QRETF:  JMS QLDR
         JUN L0001
         JUN L0002
         JUN L0003
-        JUN L0048
-        JUN L0059
-        JUN L0078
+        JUN L0058
+        JUN L0068
+        JUN L0081
 QLDR:   LD 1
         DCL
         SRC 0
@@ -1511,25 +1676,6 @@ QSTIN:  LD 5
         XCH 4
         BBL 0
         ORG 0800H
-; A = -A, OR A = A + 1.
-QNEG:   LD 4
-        CMA
-        XCH 4
-        LD 5
-        CMA
-        XCH 5
-        LD 6
-        CMA
-        XCH 6
-        LD 7
-        CMA
-        XCH 7
-QINC:   ISZ 7,QINCX
-        ISZ 6,QINCX
-        ISZ 5,QINCX
-        INC 4
-QINCX:  BBL 0
-        ORG 0814H
 ; A = THE __NIBBLE AT MAIN-MEMORY ADDRESS A.
 QLDIN:  LD 5
         DCL
@@ -1547,7 +1693,7 @@ QLDIN:  LD 5
         LDM 0
         XCH 4
         BBL 0
-        ORG 0824H
+        ORG 0810H
 ; STORE A, OR ITS LOW BYTE, IN THE STATUS REGISTER AT R0R1.
 QSTAC:  LDM 0
         XCH 4
@@ -1565,7 +1711,7 @@ QSTA:   LD 1
         LD 7
         WR3
         BBL 0
-        ORG 0834H
+        ORG 0820H
 ; A = A + B.
 QADD:   CLC
         LD 7
@@ -1581,64 +1727,7 @@ QADD:   CLC
         ADD 8
         XCH 4
         BBL 0
-        ORG 0842H
-; EXCHANGE A AND B.
-QXAB:   LD 4
-        XCH 8
-        XCH 4
-        LD 5
-        XCH 9
-        XCH 5
-        LD 6
-        XCH 10
-        XCH 6
-        LD 7
-        XCH 11
-        XCH 7
-        BBL 0
-        ORG 084FH
-; B = STATUS CHARACTER 0 OF THE REGISTER AT R0R1, A NIBBLE.
-QLBN0:  LD 1
-        DCL
-        SRC 0
-        RD0
-        XCH 11
-        LDM 0
-        XCH 10
-        LDM 0
-        XCH 9
-        LDM 0
-        XCH 8
-        BBL 0
-        ORG 085BH
-; B = STATUS CHARACTER 1 OF THE REGISTER AT R0R1, A NIBBLE.
-QLBN1:  LD 1
-        DCL
-        SRC 0
-        RD1
-        XCH 11
-        LDM 0
-        XCH 10
-        LDM 0
-        XCH 9
-        LDM 0
-        XCH 8
-        BBL 0
-        ORG 0867H
-; B = STATUS CHARACTER 3 OF THE REGISTER AT R0R1, A NIBBLE.
-QLBN3:  LD 1
-        DCL
-        SRC 0
-        RD3
-        XCH 11
-        LDM 0
-        XCH 10
-        LDM 0
-        XCH 9
-        LDM 0
-        XCH 8
-        BBL 0
-        ORG 0873H
+        ORG 082EH
 ; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
 QLDA:   LD 1
         DCL
@@ -1652,7 +1741,7 @@ QLDA:   LD 1
         RD3
         XCH 7
         BBL 0
-        ORG 087FH
+        ORG 083AH
 ; B = THE STATUS REGISTER AT R0R1.
 QLDB:   LD 1
         DCL
@@ -1666,7 +1755,7 @@ QLDB:   LD 1
         RD3
         XCH 11
         BBL 0
-        ORG 088BH
+        ORG 0846H
 ; A = STATUS CHARACTER 0 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN0:  LD 1
         DCL
@@ -1680,7 +1769,7 @@ QLDN0:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 0897H
+        ORG 0852H
 ; A = STATUS CHARACTER 1 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN1:  LD 1
         DCL
@@ -1694,7 +1783,7 @@ QLDN1:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 08A3H
+        ORG 085EH
 ; A = STATUS CHARACTER 2 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN2:  LD 1
         DCL
@@ -1708,7 +1797,7 @@ QLDN2:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 08AFH
+        ORG 086AH
 ; A = STATUS CHARACTER 3 OF THE REGISTER AT R0R1, A NIBBLE.
 QLDN3:  LD 1
         DCL
@@ -1722,7 +1811,7 @@ QLDN3:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 08BBH
+        ORG 0876H
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 0 AT R0R1; A = THAT NIBBLE.
 QSTN0:  LD 1
         DCL
@@ -1736,7 +1825,7 @@ QSTN0:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 08C7H
+        ORG 0882H
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 1 AT R0R1; A = THAT NIBBLE.
 QSTN1:  LD 1
         DCL
@@ -1750,7 +1839,7 @@ QSTN1:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 08D3H
+        ORG 088EH
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 2 AT R0R1; A = THAT NIBBLE.
 QSTN2:  LD 1
         DCL
@@ -1764,7 +1853,7 @@ QSTN2:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 08DFH
+        ORG 089AH
 ; STORE A'S LOW NIBBLE IN STATUS CHARACTER 3 AT R0R1; A = THAT NIBBLE.
 QSTN3:  LD 1
         DCL
@@ -1778,20 +1867,7 @@ QSTN3:  LD 1
         LDM 0
         XCH 4
         BBL 0
-        ORG 08EBH
-; B = THE __NIBBLE AT MAIN-MEMORY CHARACTER R0R1 OF BANK ACC.
-QLBIN:  DCL
-        SRC 0
-        RDM
-        XCH 11
-        LDM 0
-        XCH 10
-        LDM 0
-        XCH 9
-        LDM 0
-        XCH 8
-        BBL 0
-        ORG 08F6H
+        ORG 08A6H
 ; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
 QPUTC:  FIM 14,0F0H
         SRC 14
@@ -1800,16 +1876,12 @@ QPUTC:  FIM 14,0F0H
         LD 7
         WRR
         BBL 0
-        ORG 0900H
+        ORG 08AEH
 ; INCREMENT THE INT AT R0R1, LEAVING IT IN A.
 QINCV:  JMS QLDA
         JMS QINC
         JUN QSTA
-        ORG 0906H
-; THE LOW BIT OF A, IN THE ACCUMULATOR.
-QODD:   LD 7
-        RAR
-        JCN 2,QOD1
-        BBL 0
-QOD1:   BBL 1
+        ORG 08B4H
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
         END

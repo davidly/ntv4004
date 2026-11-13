@@ -223,7 +223,7 @@ instruction and operand.
 python3 cc4.py examples/c/ttt.c         # writes ttt.asm, ttt.hex and ttt.map
 ./ntv4004 -p examples/c/ttt.hex
 python3 cc4.py --stats prog.c           # also report ROM and RAM use
-python3 cc4.py --size --stats prog.c    # smaller ROM, modest extra cycles
+python3 cc4.py --size --stats prog.c    # smaller ROM; runtime tradeoff depends on the program
 python3 cc4.py -S prog.c                # write only the MAC4 source
 ```
 
@@ -237,6 +237,7 @@ C without pointers, structures or floating point:
   to a status register. `__CC4__` is predefined, so a program can use
   `__nibble` only under this compiler.
 * Functions take parameters and return values, and may be recursive.
+  Single-use leaf functions without user labels are inlined.
 * Control flow includes `switch`/`case`/`default` with fallthrough, function-scoped
   labels and `goto`, and `break`/`continue` in nested loops and switches.
   Operators include `sizeof`; pointer and member operators remain unsupported.
@@ -264,7 +265,7 @@ MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
 * Arithmetic is done in R4–R7 and R8–R11 by a runtime library of small
   routines, included only when used.
 * The hardware stack has only three levels, so it is left to the runtime
-  library. A C call stores a return number with the callee and jumps; a
+  library. A non-inlined C call stores a return number with the callee and jumps; a
   return jumps through a table of the call sites. A call that can reach the
   caller again first saves the caller's variables that are read after it,
   on a stack in RAM, and restores them afterwards.
@@ -274,7 +275,7 @@ MAC4 assembles it to the same bytes as asm4.py. The 4004 shapes the code:
 * Programs must fit in the 4004's 4K of ROM. The 4040's second bank is not
   used.
 
-The C benchmarks are the cpm_compilers sources. sieve's flags are a `_Bool`
+The C benchmarks are adapted from the cpm_compilers sources. sieve's flags are a `_Bool`
 array, since 8,191 `char`s would need eight times the 4002s' memory. ttt's
 `main` takes no arguments, and its `ttype` is `__nibble` under this compiler
 and `char` elsewhere:
@@ -284,11 +285,11 @@ and `char` elsewhere:
 | [hello](examples/c/hello.c) | 90 bytes | 1,773 | 0.02 s |
 | [e](examples/c/e.c) | 647 bytes | 27,731,334 | 300 s |
 | [sieve](examples/c/sieve.c) | 616 bytes | 55,126,048 | 596 s |
-| [ttt](examples/c/ttt.c) | 2,316 bytes | 8,883,189 | 96 s |
-| [queens](examples/c/queens.c) | 1,146 bytes | 5,538,131 | 60 s |
-| [hanoi](examples/c/hanoi.c) | 979 bytes | 1,167,358 | 13 s |
-| [maze](examples/c/maze.c) | 1,944 bytes | 460,917 | 4.98 s |
-| [life](examples/c/life.c) | 2,306 bytes | 138,044,699 | 1,492 s |
+| [ttt](examples/c/ttt.c) | 2,230 bytes | 6,252,494 | 67.6 s |
+| [queens](examples/c/queens.c) | 1,160 bytes | 5,146,369 | 55.6 s |
+| [hanoi](examples/c/hanoi.c) | 985 bytes | 1,149,826 | 12.4 s |
+| [maze](examples/c/maze.c) | 1,915 bytes | 447,627 | 4.84 s |
+| [life](examples/c/life.c) | 2,316 bytes | 138,033,031 | 1492 s |
 
 queens counts the 92 solutions to the eight queens problem by recursive
 backtracking, with packed `_Bool` arrays for the columns and diagonals, and
@@ -363,7 +364,7 @@ automatically and produces the same terminal output when no keys are pressed.
 the animation at about nine generations per second. The complete default run
 was measured at **13.80 seconds** with this setting, versus about **0.60 seconds**
 unthrottled on the development machine. Lower `-s` for slower animation. At a
-real 740 kHz 4004 clock the same 138,044,699 instruction cycles would take about
+real 740 kHz 4004 clock the same 138,033,031 instruction cycles would take about
 **24 minutes 52 seconds**, excluding I/O waits. The table above reports this
 hardware estimate, not the paced animation time.
 
@@ -376,17 +377,18 @@ Intel's INTERP/4 without adding a long simulation to the test suite.
 
 ### Compiler profiles
 
-The default profile emits direct runtime-helper calls. `--size` shares
-repeated code through helper stubs to fit more code in ROM, at the cost of
-some extra instruction cycles. Both profiles use the same RAM allocation
+The default profile uses direct nibble tests, array reads and updates where
+possible, along with runtime-helper calls. `--size` uses compact comparisons
+and shares repeated code through helper stubs to fit more code in ROM.
+The runtime tradeoff depends on the program. Both profiles use the same RAM allocation
 and respect the 4004's three-level hardware return stack. The BASIC
 interpreter requires `--size` to fit in 4 KB.
 
 | Program | Default ROM | `--size` ROM |
 | --- | ---: | ---: |
-| C TTT | 2,316 | 1,980 |
-| C queens | 1,146 | 1,052 |
-| C hanoi | 979 | 902 |
+| C TTT | 2,230 | 1,972 |
+| C queens | 1,160 | 1,058 |
+| C hanoi | 985 | 902 |
 | C e | 647 | 638 |
 | C sieve | 616 | 592 |
 

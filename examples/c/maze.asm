@@ -69,140 +69,6 @@ L0004:
         FIM 4,0
         FIM 6,0
         JUN QEXIT
-NEIGH:
-; NEIGHBOR
-; IF (DIRECTION == 0 && CELL >= SIDE) RETURN CELL-SIDE;
-        FIM 0,050H
-        JMS QLDA
-        LD 7
-        JCN 0CH,L0005
-        LD 6
-        JCN 0CH,L0005
-        FIM 0,040H
-        JMS QLDA
-        FIM 0AH,5
-        CLC
-        LD 7
-        SUB 0BH
-        CMC
-        LD 6
-        SUB 0AH
-        JCN 0AH,L0005
-        FIM 8,0
-        FIM 0AH,5
-        JMS QSUB
-        LDM 0
-        XCH 4
-        LDM 0
-        XCH 5
-        FIM 0,030H
-        JUN QRETF
-L0005:
-; IF (DIRECTION == 1 && CELL%SIDE != SIDE-1) RETURN CELL+1;
-        FIM 0,050H
-        JMS QLDA
-        FIM 0AH,1
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,L0006
-        CLC
-        LD 6
-        SUB 0AH
-        JCN 0CH,L0006
-        FIM 0,040H
-        JMS QLDA
-        FIM 8,0
-        FIM 0AH,5
-        JMS QUMOD
-        FIM 8,0
-        FIM 0AH,4
-        JMS QNE
-        JCN 4,L0006
-        FIM 0,040H
-        JMS QLDA
-        JMS QINC
-        LDM 0
-        XCH 4
-        LDM 0
-        XCH 5
-        FIM 0,030H
-        JUN QRETF
-L0006:
-; IF (DIRECTION == 2 && CELL < CELLS-SIDE) RETURN CELL+SIDE;
-        FIM 0,050H
-        JMS QLDA
-        FIM 0AH,2
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 0CH,L0007
-        CLC
-        LD 6
-        SUB 0AH
-        JCN 0CH,L0007
-        FIM 0,040H
-        JMS QLDA
-        FIM 0AH,014H
-        CLC
-        LD 7
-        SUB 0BH
-        CMC
-        LD 6
-        SUB 0AH
-        JCN 2,L0007
-        FIM 8,0
-        FIM 0AH,5
-        JMS QADD
-        LDM 0
-        XCH 4
-        LDM 0
-        XCH 5
-        FIM 0,030H
-        JUN QRETF
-L0007:
-; IF (DIRECTION == 3 && CELL%SIDE != 0) RETURN CELL-1;
-        FIM 0,050H
-        JMS QLDA
-        FIM 0AH,3
-        CLC
-        LD 7
-        SUB 0BH
-        JCN 4,$+4
-        JUN L0008
-        CLC
-        LD 6
-        SUB 0AH
-        NOP
-        NOP
-        JCN 4,$+4
-        JUN L0008
-        FIM 0,040H
-        JMS QLDA
-        FIM 8,0
-        FIM 0AH,5
-        JMS QUMOD
-        JMS QTST
-        JCN 4,L0008
-        FIM 0,040H
-        JMS QLDA
-        JMS QDEC
-        LDM 0
-        XCH 4
-        LDM 0
-        XCH 5
-        FIM 0,030H
-        JUN QRETF
-L0008:
-; RETURN 255;
-        FIM 4,0
-        FIM 6,0FFH
-        LDM 0
-        XCH 4
-        LDM 0
-        XCH 5
-        FIM 0,030H
-        JUN QRETF
 WALK:
 ; WALK
 ; UNSIGNED CHAR DEPTH, CELL, NEXT, DIRECTION, TRIES, I;
@@ -222,8 +88,8 @@ WALK:
         FIM 6,0
         FIM 0,0D0H
         JMS QSTAC
-        JUN L0010
-L0009:
+        JUN L0006
+L0005:
         FIM 0,0D0H
         JMS QLDA
         FIM 8,0
@@ -234,7 +100,7 @@ L0009:
         JMS QSBIT
         FIM 0,0D0H
         JMS QINCC
-L0010:
+L0006:
         FIM 0AH,019H
         CLC
         LD 7
@@ -242,7 +108,7 @@ L0010:
         CMC
         LD 6
         SUB 0AH
-        JCN 0AH,L0009
+        JCN 0AH,L0005
 ; VISITED(0) = 1;
         FIM 4,0
         FIM 6,064H
@@ -250,7 +116,7 @@ L0010:
         FIM 0AH,1
         JMS QSBIT
 ; WHILE (1) (
-L0013:
+L0009:
 ; CELL = STACK(DEPTH);
         FIM 0,080H
         JMS QLDA
@@ -263,22 +129,22 @@ L0013:
         JMS QSTAC
 ; IF (!GENERATING && CELL == CELLS-1) BREAK;
         FIM 0,070H
-        JMS QLDA
-        LD 7
-        JCN 0CH,L0017
-        FIM 0,090H
-        JMS QLDA
+        LD 1
+        DCL
+        SRC 0
+        RD3
+        JCN 0CH,L0013
         FIM 0AH,018H
         CLC
         LD 7
         SUB 0BH
-        JCN 0CH,L0017
+        JCN 0CH,L0013
         CLC
         LD 6
         SUB 0AH
-        JCN 0CH,L0017
-        JUN L0016
-L0017:
+        JCN 0CH,L0013
+        JUN L0012
+L0013:
 ; DIRECTION = 0;
         FIM 4,0
         FIM 6,0
@@ -286,9 +152,12 @@ L0017:
         JMS QSTAC
 ; IF (GENERATING) (
         FIM 0,070H
-        JMS QLDA
-        LD 7
-        JCN 4,L0018
+        LD 1
+        DCL
+        SRC 0
+        RD3
+        JCN 0CH,$+4
+        JUN L0014
 ; SEED = SEED*5+1;
         FIM 0,010H
         JMS QLDA
@@ -317,14 +186,14 @@ L0017:
         JMS QSHR1
         FIM 0,0B0H
         JMS QSTAC
-L0018:
+L0014:
 ; FOR (TRIES = 0; TRIES < 4; TRIES++) (
         FIM 4,0
         FIM 6,0
         FIM 0,0C0H
         JMS QSTAC
-        JUN L0020
-L0019:
+        JUN L0016
+L0015:
 ; NEXT = NEIGHBOR(CELL, DIRECTION);
         FIM 0,090H
         JMS QLDA
@@ -334,11 +203,127 @@ L0019:
         JMS QLDA
         FIM 0,050H
         JMS QSTAC
-        FIM 6,0CH
-        FIM 0,030H
-        JMS QSTAC
-        JUN NEIGH
+; IF (DIRECTION == 0 && CELL >= SIDE) RETURN CELL-SIDE;
+        LD 7
+        JCN 0CH,L0020
+        LD 6
+        JCN 0CH,L0020
+        FIM 0,040H
+        JMS QLDA
+        FIM 0AH,5
+        CLC
+        LD 7
+        SUB 0BH
+        CMC
+        LD 6
+        SUB 0AH
+        JCN 0AH,L0020
+        FIM 8,0
+        FIM 0AH,5
+        JMS QSUB
+        LDM 0
+        XCH 4
+        LDM 0
+        XCH 5
+        JUN L0019
+L0020:
+; IF (DIRECTION == 1 && CELL%SIDE != SIDE-1) RETURN CELL+1;
+        FIM 0,050H
+        JMS QLDA
+        FIM 0AH,1
+        CLC
+        LD 7
+        SUB 0BH
+        JCN 0CH,L0021
+        CLC
+        LD 6
+        SUB 0AH
+        JCN 0CH,L0021
+        FIM 0,040H
+        JMS QLDA
+        FIM 8,0
+        FIM 0AH,5
+        JMS QUMOD
+        FIM 8,0
+        FIM 0AH,4
+        JMS QNE
+        JCN 4,L0021
+        FIM 0,040H
+        JMS QLDA
+        JMS QINC
+        LDM 0
+        XCH 4
+        LDM 0
+        XCH 5
+        JUN L0019
+L0021:
+; IF (DIRECTION == 2 && CELL < CELLS-SIDE) RETURN CELL+SIDE;
+        FIM 0,050H
+        JMS QLDA
+        FIM 0AH,2
+        CLC
+        LD 7
+        SUB 0BH
+        JCN 0CH,L0022
+        CLC
+        LD 6
+        SUB 0AH
+        JCN 0CH,L0022
+        FIM 0,040H
+        JMS QLDA
+        FIM 0AH,014H
+        CLC
+        LD 7
+        SUB 0BH
+        CMC
+        LD 6
+        SUB 0AH
+        JCN 2,L0022
+        FIM 8,0
+        FIM 0AH,5
+        JMS QADD
+        LDM 0
+        XCH 4
+        LDM 0
+        XCH 5
+        JUN L0019
+L0022:
+; IF (DIRECTION == 3 && CELL%SIDE != 0) RETURN CELL-1;
+        FIM 0,050H
+        JMS QLDA
+        FIM 0AH,3
+        CLC
+        LD 7
+        SUB 0BH
+        JCN 0CH,L0023
+        CLC
+        LD 6
+        SUB 0AH
+        JCN 0CH,L0023
+        FIM 0,040H
+        JMS QLDA
+        FIM 8,0
+        FIM 0AH,5
+        JMS QUMOD
+        JMS QTST
+        JCN 4,L0023
+        FIM 0,040H
+        JMS QLDA
+        JMS QDEC
+        LDM 0
+        XCH 4
+        LDM 0
+        XCH 5
+        JUN L0019
 L0023:
+; RETURN 255;
+        FIM 4,0
+        FIM 6,0FFH
+        LDM 0
+        XCH 4
+        LDM 0
+        XCH 5
+L0019:
         FIM 0,0A0H
         JMS QSTAC
 ; IF (NEXT < CELLS && !VISITED(NEXT) &&
@@ -355,11 +340,15 @@ L0023:
         FIM 0AH,064H
         JMS QADD
         JMS QLBIT
-        JCN 0CH,L0024
+        JCN 4,$+4
+        JUN L0024
         FIM 0,070H
-        JMS QLDA
-        LD 7
-        JCN 0CH,L0025
+        LD 1
+        DCL
+        SRC 0
+        RD3
+        JCN 4,$+4
+        JUN L0025
         FIM 0,090H
         JMS QLDA
         JMS QLDIN
@@ -379,8 +368,10 @@ L0023:
 L0025:
 ; IF (GENERATING) (
         FIM 0,070H
-        JMS QLDA
-        LD 7
+        LD 1
+        DCL
+        SRC 0
+        RD3
         JCN 4,L0026
 ; PASSAGE(CELL) ?= 1 << DIRECTION;
         FIM 0,090H
@@ -454,7 +445,7 @@ L0026:
         FIM 0AH,1
         JMS QSBIT
 ; BREAK;
-        JUN L0022
+        JUN L0018
 L0024:
 ; DIRECTION = (DIRECTION+1)&3;
         FIM 0,0B0H
@@ -467,7 +458,7 @@ L0024:
         JMS QSTAC
         FIM 0,0C0H
         JMS QINCC
-L0020:
+L0016:
         FIM 0AH,4
         CLC
         LD 7
@@ -476,8 +467,8 @@ L0020:
         LD 6
         SUB 0AH
         JCN 2,$+4
-        JUN L0019
-L0022:
+        JUN L0015
+L0018:
 ; IF (TRIES == 4) (
         FIM 0,0C0H
         JMS QLDA
@@ -497,18 +488,20 @@ L0022:
         JCN 0CH,L0028
         LD 6
         JCN 0CH,L0028
-        JUN L0016
+        JUN L0012
 L0028:
 ; DEPTH--;
         FIM 0,080H
         JMS QDECC
 L0027:
-        JUN L0013
-L0016:
+        JUN L0009
+L0012:
 ; IF (!GENERATING)
         FIM 0,070H
-        JMS QLDA
-        LD 7
+        LD 1
+        DCL
+        SRC 0
+        RD3
         JCN 4,$+4
         JUN L0029
 ; FOR (I = 0; I <= DEPTH; I++) PATH(STACK(I)) = 1;
@@ -542,7 +535,8 @@ L0031:
         CMC
         LD 0AH
         SUB 6
-        JCN 2,L0030
+        JCN 0AH,$+4
+        JUN L0030
 L0029:
         FIM 0,060H
         JUN QRETF
@@ -585,11 +579,11 @@ L0038:
         JMS QSTAC
 ; PUTCHAR(SOLVED && PATH(CELL) ? '.' : ' ');
         FIM 0,1
-        JMS QLDA
-        LD 7
+        LD 1
+        DCL
+        SRC 0
+        RD3
         JCN 4,L0042
-        FIM 0,031H
-        JMS QLDA
         FIM 8,0
         FIM 0AH,080H
         JMS QADD
@@ -677,8 +671,7 @@ L0047:
         FIM 0AH,4
         JMS QAND
         LD 7
-        JCN 0CH,$+4
-        JUN L0051
+        JCN 4,L0051
         FIM 4,0
         FIM 6,020H
         JUN L0052
@@ -725,7 +718,7 @@ L0035:
         JMS QS1
         FIM 0,0F0H
         JUN QRETF
-        ORG 044DH
+        ORG 0433H
 ; A = A / B UNSIGNED, WITH THE REMAINDER IN R12-R15: 16 TIMES, SHIFT A INTO
 ; THE REMAINDER, AND SUBTRACT B, SETTING A QUOTIENT BIT, IF IT FITS. A'S
 ; LEADING ZERO NIBBLES ARE SKIPPED: THEIR QUOTIENT BITS ARE 0.
@@ -807,7 +800,7 @@ QDSUB:  CLC
         INC 7
 QDNO:   ISZ 3,QDLP
         BBL 0
-        ORG 04A2H
+        ORG 0488H
 ; A = A & B, A | B OR A ^ B, A BIT AT A TIME: R1 = THE SUM OF THE TWO BITS,
 ; WHOSE BIT 1 IS THE AND, BIT 0 THE EXCLUSIVE OR, AND SUM + 1'S BIT 1 THE OR.
 QAND:   LDM 0
@@ -886,17 +879,37 @@ QLGS:   LD 15
         LD 15
         XCH 7
         BBL 0
-        ORG 04F5H
-; A = A % B UNSIGNED.
-QUMOD:  JMS QUDIV
-QREMA:  LD 12
-        XCH 4
-        LD 13
-        XCH 5
-        LD 14
+        ORG 04DBH
+; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
+QTST:   LD 4
+        JCN 0CH,QTT
+        LD 5
+        JCN 0CH,QTT
+        LD 6
+        JCN 0CH,QTT
+        LD 7
+        JCN 0CH,QTT
+        BBL 0
+QTT:    BBL 1
+QNOTZ:  LD 4
+        JCN 0CH,QZF
+        LD 5
+        JCN 0CH,QZF
+        LD 6
+        JCN 0CH,QZF
+        LD 7
+        JCN 0CH,QZF
+        BBL 1
+QZF:    BBL 0
+        ORG 04F7H
+; A = THE ACCUMULATOR, 0 OR 1.
+QBOOL:  XCH 7
+        LDM 0
         XCH 6
-        LD 15
-        XCH 7
+        LDM 0
+        XCH 5
+        LDM 0
+        XCH 4
         BBL 0
         ORG 0500H
 ; _BOOL ARRAYS: A IS A BIT ADDRESS, 4 TIMES THE NIBBLE PLUS THE BIT. ROW B
@@ -1072,14 +1085,13 @@ QMOVB:  LD 8
         XCH 7
         BBL 0
         ORG 05F8H
-; A = THE ACCUMULATOR, 0 OR 1.
-QBOOL:  XCH 7
-        LDM 0
-        XCH 6
-        LDM 0
-        XCH 5
-        LDM 0
-        XCH 4
+; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
+QPUTC:  FIM 14,0F0H
+        SRC 14
+        LD 6
+        WRR
+        LD 7
+        WRR
         BBL 0
         ORG 0600H
 ; RETURN FROM A FUNCTION: R0R1 ADDRESSES ITS RETURN NUMBER, AN OFFSET
@@ -1091,7 +1103,6 @@ QRETF:  JMS QLDR
         JUN L0002
         JUN L0003
         JUN L0004
-        JUN L0023
 QLDR:   LD 1
         DCL
         SRC 0
@@ -1100,7 +1111,7 @@ QLDR:   LD 1
         RD3
         XCH 3
         BBL 0
-        ORG 0616H
+        ORG 0614H
 ; PRINT THE STRING AT R0R1 ON THIS PAGE.
 QS1:   FIM 14,0F0H
         SRC 14
@@ -1127,7 +1138,7 @@ S0003:
 S0004:
         DB 023H,023H,023H,023H,023H,023H,023H,023H,023H,020H,023H,0AH
         DB 0
-        ORG 0654H
+        ORG 0652H
 ; A == B OR A != B, RETURNING 1 OR 0 IN THE ACCUMULATOR.
 QEQ:    CLC
         LD 4
@@ -1165,29 +1176,7 @@ QNE:    CLC
         JCN 0CH,QNT
         BBL 0
 QNT:    BBL 1
-        ORG 0680H
-; A != 0 OR A == 0, RETURNING 1 OR 0 IN THE ACCUMULATOR.
-QTST:   LD 4
-        JCN 0CH,QTT
-        LD 5
-        JCN 0CH,QTT
-        LD 6
-        JCN 0CH,QTT
-        LD 7
-        JCN 0CH,QTT
-        BBL 0
-QTT:    BBL 1
-QNOTZ:  LD 4
-        JCN 0CH,QZF
-        LD 5
-        JCN 0CH,QZF
-        LD 6
-        JCN 0CH,QZF
-        LD 7
-        JCN 0CH,QZF
-        BBL 1
-QZF:    BBL 0
-        ORG 069CH
+        ORG 067EH
 ; CLEAR 16 - R13 BANKS OF RAM, MAIN AND STATUS CHARACTERS, FROM BANK 0.
 QCLR:   LDM 0
         XCH 12
@@ -1206,7 +1195,7 @@ QCLC:   SRC 0
         INC 12
         ISZ 13,QCLB
         BBL 0
-        ORG 06B1H
+        ORG 0693H
 ; A = -A, OR A = A + 1.
 QNEG:   LD 4
         CMA
@@ -1225,7 +1214,7 @@ QINC:   ISZ 7,QINCX
         ISZ 5,QINCX
         INC 4
 QINCX:  BBL 0
-        ORG 06C5H
+        ORG 06A7H
 ; A = A - 1. DAC SETS THE CARRY WHEN NOTHING IS BORROWED.
 QDEC:   LD 7
         DAC
@@ -1243,7 +1232,7 @@ QDEC:   LD 7
         DAC
         XCH 4
 QDECX:  BBL 0
-        ORG 06D8H
+        ORG 06BAH
 ; A = THE CHAR AT MAIN-MEMORY ADDRESS A.
 QLDIC:  LD 5
         DCL
@@ -1263,7 +1252,7 @@ QLDIC:  LD 5
         LDM 0
         XCH 5
         BBL 0
-        ORG 06EAH
+        ORG 06CCH
 ; A = A >> 1, SIGNED (QSHR1) OR UNSIGNED (QUSR1).
 QSHR1:  LD 4
         RAL
@@ -1282,10 +1271,7 @@ QSHRC:  LD 4
         RAR
         XCH 7
         BBL 0
-        ORG 06FCH
-; THE END OF THE PROGRAM: A JUMP TO ITSELF.
-QEXIT:  JUN QEXIT
-        ORG 0700H
+        ORG 06DEH
 ; STORE B'S LOW NIBBLE AT MAIN-MEMORY ADDRESS A; A = THAT NIBBLE.
 QSTIN:  LD 5
         DCL
@@ -1305,7 +1291,25 @@ QSTIN:  LD 5
         LDM 0
         XCH 4
         BBL 0
-        ORG 0712H
+        ORG 06F0H
+; A = THE __NIBBLE AT MAIN-MEMORY ADDRESS A.
+QLDIN:  LD 5
+        DCL
+        LD 6
+        XCH 0
+        LD 7
+        XCH 1
+        SRC 0
+        RDM
+        XCH 7
+        LDM 0
+        XCH 6
+        LDM 0
+        XCH 5
+        LDM 0
+        XCH 4
+        BBL 0
+        ORG 0700H
 ; A = A - B. SUB TAKES ONE MORE WHEN THE CARRY IS 1, AND SETS IT WHEN
 ; NOTHING IS BORROWED, SO CMC PASSES EACH BORROW ON.
 QSUB:   CLC
@@ -1325,25 +1329,7 @@ QSUB:   CLC
         SUB 8
         XCH 4
         BBL 0
-        ORG 0723H
-; A = THE __NIBBLE AT MAIN-MEMORY ADDRESS A.
-QLDIN:  LD 5
-        DCL
-        LD 6
-        XCH 0
-        LD 7
-        XCH 1
-        SRC 0
-        RDM
-        XCH 7
-        LDM 0
-        XCH 6
-        LDM 0
-        XCH 5
-        LDM 0
-        XCH 4
-        BBL 0
-        ORG 0733H
+        ORG 0711H
 ; STORE A, OR ITS LOW BYTE, IN THE STATUS REGISTER AT R0R1.
 QSTAC:  LDM 0
         XCH 4
@@ -1361,7 +1347,7 @@ QSTA:   LD 1
         LD 7
         WR3
         BBL 0
-        ORG 0743H
+        ORG 0721H
 ; A = A + B.
 QADD:   CLC
         LD 7
@@ -1377,7 +1363,7 @@ QADD:   CLC
         ADD 8
         XCH 4
         BBL 0
-        ORG 0751H
+        ORG 072FH
 ; A = A << 1.
 QSHL1:  CLC
         LD 7
@@ -1393,7 +1379,7 @@ QSHL1:  CLC
         RAL
         XCH 4
         BBL 0
-        ORG 075FH
+        ORG 073DH
 ; EXCHANGE A AND B.
 QXAB:   LD 4
         XCH 8
@@ -1408,7 +1394,7 @@ QXAB:   LD 4
         XCH 11
         XCH 7
         BBL 0
-        ORG 076CH
+        ORG 074AH
 ; A = THE STATUS REGISTER AT R0R1 (REGISTER, BANK).
 QLDA:   LD 1
         DCL
@@ -1422,7 +1408,7 @@ QLDA:   LD 1
         RD3
         XCH 7
         BBL 0
-        ORG 0778H
+        ORG 0756H
 ; B = THE STATUS REGISTER AT R0R1.
 QLDB:   LD 1
         DCL
@@ -1436,23 +1422,29 @@ QLDB:   LD 1
         RD3
         XCH 11
         BBL 0
-        ORG 0784H
-; PRINT THE CHARACTER IN A'S LOW BYTE ON ROM PORT 15, THE CONSOLE.
-QPUTC:  FIM 14,0F0H
-        SRC 14
-        LD 6
-        WRR
-        LD 7
-        WRR
+        ORG 0762H
+; A = A % B UNSIGNED.
+QUMOD:  JMS QUDIV
+QREMA:  LD 12
+        XCH 4
+        LD 13
+        XCH 5
+        LD 14
+        XCH 6
+        LD 15
+        XCH 7
         BBL 0
-        ORG 078CH
+        ORG 076DH
 ; DECREMENT THE CHAR AT R0R1, LEAVING IT IN A.
 QDECC:  JMS QLDA
         JMS QDEC
         JUN QSTAC
-        ORG 0792H
+        ORG 0773H
 ; INCREMENT THE CHAR AT R0R1, LEAVING IT IN A.
 QINCC:  JMS QLDA
         JMS QINC
         JUN QSTAC
+        ORG 0779H
+; THE END OF THE PROGRAM: A JUMP TO ITSELF.
+QEXIT:  JUN QEXIT
         END

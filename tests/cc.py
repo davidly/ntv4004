@@ -927,6 +927,118 @@ int main() {{
 """
         self.assertEqual(run_c(source, limit=200_000_000, keys=bytes(keys)), expected)
 
+    def test_direct_nibble_conditions(self):
+        source = r"""
+char padding[128];
+__nibble aligned[16], indices[16], gap[1], unaligned[16];
+__nibble a, b, n, expected;
+volatile __nibble v;
+int main() {
+    int i,j,bit;
+    for(i=0;i<16;i++) {
+        a=i;
+        for(j=0;j<16;j++) {
+            b=j; n=(i+j)&15; v=i;
+            if(a==b) putchar('1'); else putchar('0');
+            if(a!=b) putchar('1'); else putchar('0');
+            if(a<b) putchar('1'); else putchar('0');
+            if(a<=b) putchar('1'); else putchar('0');
+            if(a>b) putchar('1'); else putchar('0');
+            if(a>=b) putchar('1'); else putchar('0');
+            bit=0; while(a<b) { bit=1; break; } putchar('0'+bit);
+            bit=0; while(a>=b) { bit=1; break; } putchar('0'+bit);
+            if(a&1) putchar('1'); else putchar('0');
+            if(v>b) putchar('1'); else putchar('0');
+            aligned[3]=b; aligned[n]=b; unaligned[n]=b;
+            if(a==aligned[3]) putchar('1'); else putchar('0');
+            if(a==aligned[n]) putchar('1'); else putchar('0');
+            if(a==unaligned[n]) putchar('1'); else putchar('0');
+            if(aligned[n]) putchar('1'); else putchar('0');
+            putchar('\n');
+        }
+    }
+    for(i=0;i<16;i++) { aligned[i]=(i*7+3)&15; indices[i]=15-i; }
+    for(i=0;i<16;i++) {
+        n=i; expected=((15-i)*7+3)&15;
+        if(aligned[indices[n]]==expected) putchar('1'); else putchar('0');
+    }
+    putchar('\n');
+    return 0;
+}
+"""
+        expected = ''
+        for a in range(16):
+            for b in range(16):
+                values = (a==b,a!=b,a<b,a<=b,a>b,a>=b,a<b,a>=b,a&1,a>b,
+                          a==b,a==b,a==b,b!=0)
+                expected += ''.join('1' if x else '0' for x in values)+'\n'
+        expected += '1'*16+'\n'
+        self.assertEqual(run_c(source), expected)
+        # Interrupts must preserve ACC, carry, bank selection and index registers
+        # even between a direct nibble address calculation and its RAM read.
+        handler = 'unsigned churn; __interrupt void tick(void) { churn++; }\n'
+        interrupting = handler+source.replace('int main() {', 'int main() { __ei();', 1)
+        self.assertEqual(run_c(interrupting, options=('-I:499',), cpu='4040'), expected)
+
+    def test_nibble_increment_boundaries(self):
+        source = r"""
+volatile __nibble n;
+__nibble left=7, right=9;
+int main() {
+    int i,x;
+    for(i=0;i<16;i++) {
+        n=i; x=n++; printf("%u %u ",x,n);
+        n=i; x=++n; printf("%u %u ",x,n);
+        n=i; x=n--; printf("%u %u ",x,n);
+        n=i; x=--n; printf("%u %u ",x,n);
+        n=i; n++; printf("%u ",n);
+        n=i; --n; printf("%u\n",n);
+    }
+    printf("%u %u\n",left,right);
+    return 0;
+}
+"""
+        expected = ''
+        for n in range(16):
+            up, down = (n+1)&15, (n-1)&15
+            expected += f'{n} {up} {up} {up} {n} {down} {down} {down} {up} {down}\n'
+        self.assertEqual(run_c(source), expected+'7 9\n')
+
+    def test_single_use_leaf(self):
+        # Both caller and callee need expression temporaries; the leaf writes a global.
+        source = r"""
+int g;
+int leaf(int x) {
+    int t;
+    t=(x+3)*(x-2); g+=x;
+    if(x<0) return -t;
+    switch(x&3) { case 1: return t+5; default: return t-5; }
+}
+int main() {
+    int i,total=0;
+    for(i=0;i<6;i++) total+=(128*(i+1))/(17+leaf(i-2));
+    printf("%d %d\n",total,g);
+    return 0;
+}
+"""
+        self.assertEqual(run_c(source), '204 3\n')
+        source = r"""
+int leaf(int x) { return (x+3)*(x+3)+x; }
+unsigned rec(int n) { if(!n) return 2; return (leaf(n)+3)*rec(n-1); }
+int main() { printf("%u\n",rec(3)); return 0; }
+"""
+        self.assertEqual(run_c(source), '50400\n')
+        source = r"""
+volatile __nibble n=15;
+int leaf(int unused) { return 7; }
+int main() { printf("%d %d\n",leaf(n++),n); return 0; }
+"""
+        self.assertEqual(run_c(source), '7 0\n')
+        for keyword in ('break', 'continue'):
+            with self.subTest(keyword=keyword), self.assertRaises(cc4.CompileError) as caught:
+                cc4.compile_source('void leaf(){'+keyword+';} int main(){while(1){leaf();break;}return 0;}',size=SIZE)
+            self.assertIn('not in a loop', str(caught.exception))
+
     def test_goto(self):
         source = r"""
 int f(int n) {
